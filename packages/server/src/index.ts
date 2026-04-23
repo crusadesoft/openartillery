@@ -28,7 +28,28 @@ app.use(httpLogger);
 app.use(httpTiming());
 app.use(
   helmet({
-    contentSecurityPolicy: config.NODE_ENV === "production" ? undefined : false,
+    contentSecurityPolicy:
+      config.NODE_ENV === "production"
+        ? {
+            useDefaults: true,
+            directives: {
+              // Client opens a WebSocket to the same origin for Colyseus
+              // and fetches matchmake HTTP. Allow both schemes to self.
+              "connect-src": ["'self'", "ws:", "wss:"],
+              // Cloudflare auto-injects a beacon from this host; without
+              // it CSP blocks the beacon script.
+              "script-src": ["'self'", "https://static.cloudflareinsights.com"],
+              // Phaser + tank previews draw to canvas and use inline
+              // <style> from our CSS-in-JS; allow inline styles.
+              "style-src": ["'self'", "'unsafe-inline'"],
+              // Tank/weapon sprites are data: URIs generated at runtime.
+              "img-src": ["'self'", "data:", "blob:"],
+              // Drop the upgrade-insecure-requests directive so local dev
+              // builds reachable over http still work if we ever proxy.
+              "upgrade-insecure-requests": null,
+            },
+          }
+        : false,
   }),
 );
 app.use(

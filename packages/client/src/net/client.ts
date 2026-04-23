@@ -7,11 +7,16 @@ function endpoint(): string {
   const isSecure = location.protocol === "https:";
   const proto = isSecure ? "wss" : "ws";
   const host = location.hostname;
-  const port =
-    location.port === "5173" || location.port === ""
-      ? 2567
-      : Number(location.port);
-  return `${proto}://${host}:${port}`;
+  // In production the server is fronted by the same origin (port 80/443),
+  // so we drop the explicit port. Only Vite dev (5173) needs to reach a
+  // different local port — point it at the server's 2567.
+  if (location.port === "" || (isSecure && location.port === "443") || (!isSecure && location.port === "80")) {
+    return `${proto}://${host}`;
+  }
+  if (location.port === "5173") {
+    return `${proto}://${host}:2567`;
+  }
+  return `${proto}://${host}:${location.port}`;
 }
 
 let client: Client | null = null;

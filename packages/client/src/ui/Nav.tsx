@@ -10,7 +10,7 @@ export function Nav({ navigate }: Props): JSX.Element {
   return (
     <div className="nav">
       <span className="brand" onClick={go({ name: "home" })}>
-        ARTILLERY
+        OPENARTILLERY
       </span>
       <SfxButton onClick={go({ name: "play" })}>Play</SfxButton>
       <SfxButton onClick={go({ name: "customize" })}>Customize</SfxButton>

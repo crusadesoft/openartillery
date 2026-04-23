@@ -17,18 +17,17 @@ COPY packages/client packages/client
 
 RUN npm run build:shared \
  && npm run build -w @artillery/server \
- && npm run build -w @artillery/client
+ && npm run build -w @artillery/client \
+ && npm prune --omit=dev --workspaces --include-workspace-root
 
 # ─── runtime stage ────────────────────────────────────────────────────────────
 FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# Copy the whole built tree. npm workspaces can place some deps in
-# per-package node_modules (e.g. when hoisting conflicts), so rather
-# than enumerate every path that might or might not exist, we copy the
-# builder's /app verbatim. Source files ride along — negligible size
-# next to node_modules and no PII.
+# Copy the pruned tree. npm workspaces can place some deps in per-package
+# node_modules (e.g. when hoisting conflicts), so rather than enumerate
+# every path that might or might not exist, we copy /app verbatim.
 COPY --from=builder /app ./
 
 EXPOSE 2567

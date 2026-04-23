@@ -14,7 +14,13 @@ apiRouter.get(
   asyncHandler(async (req, res) => {
     const limit = Math.min(100, Number(req.query.limit ?? 50) || 50);
     const rows = await db.query.users.findMany({
-      orderBy: [desc(schema.users.mmr)],
+      // Tiebreak on wins first, then oldest account — without this, users
+      // at 1200 MMR (default) shuffle between reloads.
+      orderBy: [
+        desc(schema.users.mmr),
+        desc(schema.users.wins),
+        schema.users.createdAt,
+      ],
       limit,
     });
     const out: LeaderboardEntry[] = rows.map((u, i) => ({

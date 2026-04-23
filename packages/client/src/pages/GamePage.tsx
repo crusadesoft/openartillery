@@ -47,8 +47,7 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
         setState({ kind: "game", room });
       } catch (err) {
         if (signal.aborted) return;
-        const message = err instanceof Error ? err.message : String(err);
-        setState({ kind: "error", message });
+        setState({ kind: "error", message: friendlyJoinError(err) });
       }
     },
     [
@@ -116,4 +115,19 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
   };
 
   return <GameShell room={state.room} onLeave={leave} />;
+}
+
+// Colyseus surfaces transport failures as a raw `ProgressEvent` whose
+// String() form is `[object ProgressEvent]`. Dig out a useful message
+// instead — check `.message` (our own throws + most Error subclasses),
+// then a few common Colyseus error shapes, else a generic connection
+// message. Never show the raw object to the user.
+function friendlyJoinError(err: unknown): string {
+  if (err instanceof Error && err.message) return err.message;
+  const obj = err as { message?: string; code?: number | string; reason?: string; type?: string } | null;
+  if (obj?.message) return obj.message;
+  if (obj?.reason) return obj.reason;
+  if (obj?.code) return `Couldn't reach the server (code ${obj.code}).`;
+  if (obj?.type === "error") return "Couldn't reach the server.";
+  return "Couldn't reach the server.";
 }

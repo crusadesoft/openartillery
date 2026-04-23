@@ -20,7 +20,7 @@ export function MainMenu({ onPlay, error }: Props): JSX.Element {
   return (
     <div className="screen">
       <form className="menu-card" onSubmit={submit}>
-        <h1>ARTILLERY</h1>
+        <h1>OPENARTILLERY</h1>
         <p className="tagline">
           Turn-based tank carnage. Wind, gravity, destructible earth.
         </p>

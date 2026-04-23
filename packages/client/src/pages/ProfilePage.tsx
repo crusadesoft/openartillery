@@ -104,7 +104,6 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
   if (!profile) return <div className="container"><div className="card"><p style={{ color: "var(--ink-dim)" }}>Loading service record…</p></div></div>;
 
   const rank = rankFor(profile.mmr);
-  const prevRank = RANKS[Math.max(0, RANKS.indexOf(rank) - 1)]!;
   const toNext = Math.max(0, rank.next - profile.mmr);
   const progress = Math.max(0, Math.min(1, (profile.mmr - rank.min) / Math.max(1, rank.next - rank.min)));
   const totalGames = profile.wins + profile.losses;
@@ -138,7 +137,7 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
                 <div style={{ width: `${progress * 100}%`, background: rank.color }} />
               </div>
               <div className="rank-progress-labels">
-                <span>{prevRank.name}</span>
+                <span>{rank.name}</span>
                 <span>{toNext > 0 ? `${toNext} MMR → ${RANKS[Math.min(RANKS.length - 1, RANKS.indexOf(rank) + 1)]!.name}` : "MAX RANK"}</span>
               </div>
             </div>
