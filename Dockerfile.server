@@ -24,14 +24,14 @@ FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
+# npm workspaces hoist everything into the root /app/node_modules, so
+# there's no per-package node_modules to copy — only dist + package.json.
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/packages/shared/package.json packages/shared/
 COPY --from=builder /app/packages/shared/dist packages/shared/dist
-COPY --from=builder /app/packages/shared/node_modules packages/shared/node_modules
 COPY --from=builder /app/packages/server/package.json packages/server/
 COPY --from=builder /app/packages/server/dist packages/server/dist
-COPY --from=builder /app/packages/server/node_modules packages/server/node_modules
 COPY --from=builder /app/packages/client/dist packages/client/dist
 
 EXPOSE 2567
