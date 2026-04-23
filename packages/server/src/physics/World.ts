@@ -147,9 +147,13 @@ export class World {
     // mirrored by facing so the math lines up with the mirrored sprite.
     const pivotX = p.x + TANK.BARREL_PIVOT_X * p.facing;
     const pivotY = p.y + TANK.BARREL_PIVOT_Y;
+    // Each barrel style has its own visual length — use the player's so
+    // long/sniper/stubby rounds spawn at the actual muzzle.
+    const barrelLen =
+      TANK.BARREL_LENGTHS[p.barrelStyle] ?? TANK.BARREL_LENGTH;
     return {
-      x: pivotX + dirX * TANK.BARREL_LENGTH,
-      y: pivotY + dirY * TANK.BARREL_LENGTH,
+      x: pivotX + dirX * barrelLen,
+      y: pivotY + dirY * barrelLen,
       dirX,
       dirY,
     };

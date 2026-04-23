@@ -26,17 +26,25 @@ export const TANK = {
   WIDTH: 36,
   HEIGHT: 18,
   MAX_HP: 100,
-  /** Length of the visible barrel sprite at the standard style.
-   *  Derived from `tankPreview.barrelLenMap.standard * 48 = 22.08`,
-   *  rounded for cleanliness. Server uses this when spawning
-   *  projectiles from the muzzle tip. */
+  /** Fallback barrel length when a specific style isn't known.
+   *  Derived from `tankPreview.barrelLenMap.standard * 48 = 22.08`. */
   BARREL_LENGTH: 22,
   /** Offset of the barrel pivot inside the tank container, mirrored by
    *  facing. Derived from the canonical hull renderer's barrel pivot
-   *  relative to hull centre (heavy hull + standard turret). Slight
-   *  variance for other body styles is negligible gameplay-wise. */
+   *  relative to hull centre (heavy hull + standard turret). */
   BARREL_PIVOT_X: 2,
   BARREL_PIVOT_Y: -11,
+  /** Barrel lengths per style, derived from the canonical
+   *  `tankPreview.barrelLenMap * 48`. Server projectile-spawn uses the
+   *  player-specific length so long/sniper/stubby rounds leave the
+   *  muzzle at the right point instead of mid-shaft. */
+  BARREL_LENGTHS: {
+    standard: 22,
+    heavy: 20,
+    long: 28,
+    sniper: 32,
+    stubby: 15,
+  } as Record<string, number>,
   MIN_ANGLE_DEG: -90,
   MAX_ANGLE_DEG: 90,
   AIM_RATE_DEG_PER_SEC: 45,

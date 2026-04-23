@@ -136,12 +136,15 @@ export class TankView {
     // Facing is handled by mirroring both hull and barrel horizontally.
     // Using `scaleX = -1` (rather than `setFlipX`) mirrors around the
     // sprite's origin anchor, which is what we want for consistent
-    // pivot-based rotation.
+    // pivot-based rotation. Because Phaser applies scale *before*
+    // rotation, flipping x inverts the direction the rotation swings
+    // — so the barrel's rotation angle must flip sign with facing to
+    // keep pointing at the same world-space target.
     const facing = player.facing < 0 ? -1 : 1;
     this.hull.scaleX = facing * Math.abs(this.hull.scaleX);
     this.barrel.scaleX = facing * Math.abs(this.barrel.scaleX);
     this.barrel.setPosition(this.barrelOffsetX * facing, this.barrelOffsetY);
-    this.barrel.setRotation(-angleRad);
+    this.barrel.setRotation(-angleRad * facing);
 
     // Dead state darkens the hull via a multiply-tint on top of the
     // pre-coloured texture. Live hulls use 0xffffff which leaves the

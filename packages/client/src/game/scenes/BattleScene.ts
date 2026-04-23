@@ -424,8 +424,14 @@ export class BattleScene extends Phaser.Scene {
     const dirY = -Math.sin(angleRad);
     // Match the barrel sprite pivot so the arrow emerges from the muzzle,
     // not the hull center. Must stay in sync with World.barrelTip().
-    const baseX = self.x + TANK.BARREL_PIVOT_X * facing + dirX * TANK.BARREL_LENGTH;
-    const baseY = self.y + TANK.BARREL_PIVOT_Y + dirY * TANK.BARREL_LENGTH;
+    // Use the player's actual barrel length so the aim arrow starts
+    // exactly at the muzzle tip instead of always using the standard
+    // length — otherwise sniper/long/stubby draw arrows inside or past
+    // their own barrel.
+    const barrelLen =
+      TANK.BARREL_LENGTHS[self.barrelStyle] ?? TANK.BARREL_LENGTH;
+    const baseX = self.x + TANK.BARREL_PIVOT_X * facing + dirX * barrelLen;
+    const baseY = self.y + TANK.BARREL_PIVOT_Y + dirY * barrelLen;
 
     // Short directional indicator only — no ballistic "cheat" preview.
     // Length scales with power so the player gets feel for how much they
