@@ -44,7 +44,7 @@ export class BotBrain {
     // out of ammo so the bot doesn't lock itself on an exhausted slot.
     const pool = spec.weaponPool.filter((w): w is WeaponId => {
       if (!(w in WEAPONS)) return false;
-      const def = WEAPONS[w];
+      const def = WEAPONS[w as WeaponId];
       if (def.maxAmmo === undefined) return true;
       const remaining = p.ammo.get(w);
       return remaining === undefined ? true : remaining > 0;
