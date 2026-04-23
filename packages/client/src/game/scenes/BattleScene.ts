@@ -40,8 +40,16 @@ export class BattleScene extends Phaser.Scene {
   private tanks = new Map<string, TankView>();
   private projectiles = new Map<string, ProjectileView>();
   private fires = new Map<string, FireView>();
+  /** Active speech bubbles keyed by player.id. Each updates its position
+   *  every frame to track the tank and fades after a few seconds. */
+  private speechBubbles = new Map<string, {
+    container: Phaser.GameObjects.Container;
+    ownerId: string;
+    expireAt: number;
+  }>();
 
   private stars!: Phaser.GameObjects.Group;
+  private skyLayers: Phaser.GameObjects.GameObject[] = [];
   private aimLine!: Phaser.GameObjects.Graphics;
   private reticle!: Phaser.GameObjects.Graphics;
   private dragOverlay!: Phaser.GameObjects.Graphics;
@@ -56,6 +64,16 @@ export class BattleScene extends Phaser.Scene {
   private trackedProjectileId: string | null = null;
   /** Trajectory samples for the in-flight recording. */
   private activeArc: { x: number; y: number }[] = [];
+  /** Snapshot of the firing state captured when the tracked projectile
+   *  first appears. Used to re-draw the previous shot's aim arrow so
+   *  the player can reference angle/power/position visually. */
+  private lastShot: {
+    tankX: number;
+    tankY: number;
+    angle: number;
+    power: number;
+    facing: -1 | 1;
+  } | null = null;
   /** True once we've captured the arc for the current turn — blocks
    *  re-tracking of sub-munitions (cluster bomblets, MIRV warheads,
    *  airstrike fall-ins) so the saved arc always shows the primary
@@ -148,6 +166,7 @@ export class BattleScene extends Phaser.Scene {
     this.renderLastArc();
     this.renderAim();
     this.updateCamera(dt);
+    this.updateSpeechBubbles(time);
   }
 
   /** Appends the tracked projectile's current position to `activeArc`,
@@ -173,43 +192,215 @@ export class BattleScene extends Phaser.Scene {
     if (!this.isMyTurn()) return;
     const self = this.room.state.players.get(this.room.sessionId);
     if (!self || self.dead) return;
-    // Dotted segments sampled every ~22 world px.
-    this.lastArcGfx.fillStyle(0xd49228, 0.55);
-    let acc = 0;
+    // Dashed trace — resample the arc into small constant-length sub-
+    // segments, then draw only the ones whose midpoint lies inside a
+    // "dash" window. Off-white reads cleanly on both green (grasslands)
+    // and rust (desert) terrain.
+    const color = 0xf0ecdc;
+    const alpha = 0.82;
+    const STEP = 2;
+    const DASH_LEN = 7;
+    const GAP_LEN = 5;
+    const CYCLE = DASH_LEN + GAP_LEN;
+    this.lastArcGfx.lineStyle(1.8, color, alpha);
+    let totalDist = 0;
     for (let i = 1; i < this.lastArc.length; i++) {
       const a = this.lastArc[i - 1]!;
       const b = this.lastArc[i]!;
       const segLen = Math.hypot(b.x - a.x, b.y - a.y);
-      acc += segLen;
-      if (acc >= 22) {
-        acc = 0;
-        this.lastArcGfx.fillCircle(b.x, b.y, 1.7);
+      if (segLen < 0.1) continue;
+      const steps = Math.max(1, Math.ceil(segLen / STEP));
+      for (let s = 0; s < steps; s++) {
+        const t0 = s / steps;
+        const t1 = (s + 1) / steps;
+        const subLen = segLen / steps;
+        const midDist = totalDist + subLen / 2;
+        if (midDist % CYCLE < DASH_LEN) {
+          this.lastArcGfx.lineBetween(
+            a.x + (b.x - a.x) * t0,
+            a.y + (b.y - a.y) * t0,
+            a.x + (b.x - a.x) * t1,
+            a.y + (b.y - a.y) * t1,
+          );
+        }
+        totalDist += subLen;
       }
     }
-    // Emphasised landing pin.
+    // Landing pin — same off-white so it reads as a set.
     const last = this.lastArc[this.lastArc.length - 1]!;
-    this.lastArcGfx.lineStyle(1.5, 0xd49228, 0.75);
+    this.lastArcGfx.lineStyle(1.6, color, 0.9);
     this.lastArcGfx.strokeCircle(last.x, last.y, 5);
-    this.lastArcGfx.fillStyle(0xd49228, 0.9);
-    this.lastArcGfx.fillCircle(last.x, last.y, 1.6);
+    this.lastArcGfx.fillStyle(color, 0.95);
+    this.lastArcGfx.fillCircle(last.x, last.y, 1.8);
+
+    // Previous-shot aim arrow — drawn from the tank's position at the
+    // time of firing, using the same geometry as the live aim arrow.
+    // Same off-white palette as the trace so it reads as one reference.
+    if (this.lastShot) {
+      const { tankX, tankY, angle, power, facing } = this.lastShot;
+      const barrelLen =
+        TANK.BARREL_LENGTHS[self.barrelStyle] ?? TANK.BARREL_LENGTH;
+      const angleRad = (angle * Math.PI) / 180;
+      const dirX = Math.cos(angleRad) * facing;
+      const dirY = -Math.sin(angleRad);
+      const baseX = tankX + TANK.BARREL_PIVOT_X * facing + dirX * barrelLen;
+      const baseY = tankY + TANK.BARREL_PIVOT_Y + dirY * barrelLen;
+      const powerT = Math.max(
+        0,
+        Math.min(1, (power - TANK.MIN_POWER) / (TANK.MAX_POWER - TANK.MIN_POWER)),
+      );
+      const arrowLen = 40 + powerT * 90;
+      const tipX = baseX + dirX * arrowLen;
+      const tipY = baseY + dirY * arrowLen;
+      this.lastArcGfx.lineStyle(2, color, 0.6);
+      this.lastArcGfx.lineBetween(baseX, baseY, tipX, tipY);
+      // Arrowhead — triangle at the tip.
+      const perpX = -dirY;
+      const perpY = dirX;
+      this.lastArcGfx.fillStyle(color, 0.7);
+      this.lastArcGfx.fillTriangle(
+        tipX + dirX * 7, tipY + dirY * 7,
+        tipX - dirX * 3 + perpX * 4.5, tipY - dirY * 3 + perpY * 4.5,
+        tipX - dirX * 3 - perpX * 4.5, tipY - dirY * 3 - perpY * 4.5,
+      );
+    }
   }
 
   private drawStars(biome: BiomeId): void {
+    // Tear down previous layers (biome switch).
     this.stars?.clear(true, true);
+    for (const obj of this.skyLayers) obj.destroy();
+    this.skyLayers = [];
     this.stars = this.add.group();
-    const dim = biome === "lava" || biome === "desert" ? 0.35 : 0.85;
+
+    // Sky gradient + mountains come from `TerrainView`. Here we layer
+    // decorative atmosphere *on top* of those: haze, sun/moon, clouds,
+    // stars.
+    const palettes: Record<BiomeId, { sun: number; haze: number; cloud: number }> = {
+      grasslands: { sun: 0xffe2a8, haze: 0xc4d4c0, cloud: 0xe8e6dc },
+      desert:     { sun: 0xfff2c8, haze: 0xe7c49a, cloud: 0xe0b570 },
+      arctic:     { sun: 0xeadffa, haze: 0xd4e1ef, cloud: 0xc4d6ea },
+      lava:       { sun: 0xff7030, haze: 0xa03020, cloud: 0x702820 },
+      dusk:       { sun: 0xffb570, haze: 0xc06a80, cloud: 0xff9a70 },
+      rock:       { sun: 0xd0c8b0, haze: 0xa89878, cloud: 0xc4b898 },
+    };
+    const pal = palettes[biome] ?? palettes.grasslands;
+    const skyH = WORLD.HEIGHT * 0.62;
+
+    // Haze band just above the horizon — softens where sky meets terrain.
+    const haze = this.add.graphics();
+    haze.fillStyle(pal.haze, 0.35);
+    haze.fillRect(0, skyH * 0.82, WORLD.WIDTH, skyH * 0.3);
+    haze.setDepth(-2.5);
+    haze.setScrollFactor(0.18);
+    this.skyLayers.push(haze);
+
+    // Sun / moon disc with a warm halo. On day biomes we use the sun
+    // halo texture (warm blended glow); on night-feel biomes a moon.
+    const sunX = biome === "dusk" ? WORLD.WIDTH * 0.22 : WORLD.WIDTH * 0.78;
+    const sunY = skyH * (biome === "lava" ? 0.16 : 0.24);
+    const halo = this.add
+      .image(sunX, sunY, "sun_halo")
+      .setAlpha(biome === "lava" ? 0.75 : 0.55)
+      .setTint(pal.sun)
+      .setScale(biome === "lava" ? 2.4 : 1.7)
+      .setDepth(-3)
+      .setScrollFactor(0.15)
+      .setBlendMode(Phaser.BlendModes.ADD);
+    this.skyLayers.push(halo);
+    if (biome === "arctic" || biome === "grasslands") {
+      const moon = this.add
+        .image(sunX, sunY, "moon")
+        .setScale(0.9)
+        .setDepth(-2.8)
+        .setScrollFactor(0.15);
+      this.skyLayers.push(moon);
+    } else {
+      // Warm sun disc for desert / lava / dusk / rock biomes.
+      const disc = this.add.graphics();
+      disc.fillStyle(pal.sun, 0.92);
+      disc.fillCircle(0, 0, biome === "lava" ? 26 : 22);
+      disc.fillStyle(0xffffff, 0.25);
+      disc.fillCircle(-4, -4, biome === "lava" ? 16 : 12);
+      disc.setPosition(sunX, sunY);
+      disc.setDepth(-2.8);
+      disc.setScrollFactor(0.15);
+      this.skyLayers.push(disc);
+    }
+
+    // Drifting clouds — sit between the far and near mountain layers so
+    // they read as mid-distance and respect parallax. None on lava
+    // (replaced with falling embers via TerrainView).
     const rng = Phaser.Math.RND;
-    for (let i = 0; i < 120; i++) {
+    if (biome !== "lava") {
+      const n = biome === "desert" ? 5 : 8;
+      for (let i = 0; i < n; i++) {
+        const key = i % 2 === 0 ? "cloud_a" : "cloud_b";
+        const cx = rng.between(0, WORLD.WIDTH);
+        const cy = rng.between(skyH * 0.2, skyH * 0.55);
+        const c = this.add
+          .image(cx, cy, key)
+          .setAlpha(0.45 + Math.random() * 0.35)
+          .setTint(pal.cloud)
+          .setScale(0.8 + Math.random() * 0.7)
+          .setDepth(-1.5)
+          .setScrollFactor(0.45);
+        this.skyLayers.push(c);
+        this.tweens.add({
+          targets: c,
+          x: cx + (Math.random() * 240 - 120),
+          duration: 30000 + Math.random() * 40000,
+          yoyo: true,
+          repeat: -1,
+        });
+      }
+    }
+
+    // Stars — denser on night-feel biomes.
+    const starDim = biome === "lava" || biome === "desert" ? 0.2 : 0.9;
+    const starCount = biome === "arctic" || biome === "dusk" ? 240 : 150;
+    for (let i = 0; i < starCount; i++) {
       const x = rng.between(0, WORLD.WIDTH);
-      const y = rng.between(0, WORLD.HEIGHT * 0.5);
-      const alpha = rng.realInRange(0.15, 0.9) * dim;
+      const y = rng.between(0, skyH * 0.72);
+      const alpha = rng.realInRange(0.1, 0.95) * starDim;
+      const big = Math.random() < 0.08;
       const img = this.add
         .image(x, y, "pixel")
         .setAlpha(alpha)
-        .setDepth(-1)
-        .setScrollFactor(0.3);
+        .setScale(big ? 2 : 1)
+        .setTint(big ? 0xffe8c0 : 0xffffff)
+        .setDepth(-3)
+        .setScrollFactor(0.22);
       this.stars.add(img);
+      if (big) {
+        this.tweens.add({
+          targets: img,
+          alpha: alpha * 0.35,
+          duration: 900 + Math.random() * 1400,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.easeInOut",
+        });
+      }
     }
+
+    // Subtle atmospheric dust drifting upward across the map — sells
+    // the sense of a living battlefield.
+    const dust = this.add.particles(0, 0, "pixel", {
+      lifespan: { min: 8000, max: 14000 },
+      speedY: { min: -6, max: -2 },
+      speedX: { min: -4, max: 4 },
+      scale: { start: 0.8, end: 0.2 },
+      tint: [pal.haze, pal.cloud],
+      alpha: { start: 0.15, end: 0 },
+      x: { min: 0, max: WORLD.WIDTH },
+      y: { min: skyH * 0.5, max: WORLD.HEIGHT },
+      quantity: 1,
+      frequency: 450,
+    });
+    dust.setDepth(-0.8);
+    dust.setScrollFactor(0.5);
+    this.skyLayers.push(dust);
   }
 
   private setupInput(): void {
@@ -568,6 +759,18 @@ export class BattleScene extends Phaser.Scene {
     ) {
       this.trackedProjectileId = pr.id;
       this.activeArc = [{ x: pr.x, y: pr.y }];
+      // Snapshot where + how we fired so the previous-aim arrow can be
+      // re-rendered as a reference.
+      const self = this.room.state.players.get(this.room.sessionId);
+      if (self) {
+        this.lastShot = {
+          tankX: self.x,
+          tankY: self.y,
+          angle: self.angle,
+          power: Math.max(TANK.MIN_POWER, self.power || TANK.MIN_POWER),
+          facing: (self.facing as -1 | 1) || 1,
+        };
+      }
     }
   }
   private removeProjectile(key: string): void {
@@ -598,7 +801,9 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private handleEvent(evt: ServerEvent): void {
-    if (evt.type === "fire") {
+    if (evt.type === "chat") {
+      this.spawnSpeechBubble(evt.name, evt.text);
+    } else if (evt.type === "fire") {
       const def = WEAPONS[evt.weapon];
       Sound.play(def.fireSfx, { rate: 0.8 + Math.random() * 0.3 });
       this.cameras.main.shake(80, 0.0025);
@@ -676,105 +881,325 @@ export class BattleScene extends Phaser.Scene {
     });
   }
 
+  /** Floating comic-style speech bubble over the tank of whoever sent
+   *  `text` in chat. Finds the player by name (server broadcasts name,
+   *  not id). Falls back to silently dropping if no matching tank is
+   *  on screen — system messages, disconnected players, etc. */
+  private spawnSpeechBubble(name: string, text: string): void {
+    if (!text || name === "server") return;
+    // Find the player by display name.
+    let ownerId: string | null = null;
+    this.room.state.players.forEach((p, id) => {
+      if (ownerId === null && p.name === name) ownerId = id;
+    });
+    if (!ownerId) return;
+    const view = this.tanks.get(ownerId);
+    if (!view) return;
+
+    // Cap very long messages so bubbles don't cover the battlefield.
+    const display = text.length > 60 ? text.slice(0, 58) + "…" : text;
+
+    // Remove any existing bubble for this player — new message replaces it.
+    const existing = this.speechBubbles.get(ownerId);
+    if (existing) existing.container.destroy();
+
+    const container = this.add.container(view.container.x, view.container.y - 50);
+    container.setDepth(20);
+    const label = this.add.text(0, 0, display, {
+      fontFamily: "Chakra Petch, system-ui",
+      fontSize: "12px",
+      color: "#f0ead8",
+      fontStyle: "600",
+      align: "center",
+      wordWrap: { width: 220 },
+    }).setOrigin(0.5, 0.5);
+    const pad = { x: 10, y: 6 };
+    const bounds = label.getBounds();
+    const bgW = Math.max(60, bounds.width + pad.x * 2);
+    const bgH = bounds.height + pad.y * 2;
+
+    const bg = this.add.graphics();
+    bg.fillStyle(0x0b0c10, 0.92);
+    bg.lineStyle(1.2, 0xd0a878, 0.8);
+    bg.fillRoundedRect(-bgW / 2, -bgH / 2, bgW, bgH, 5);
+    bg.strokeRoundedRect(-bgW / 2, -bgH / 2, bgW, bgH, 5);
+    // Tail pointing down at the tank.
+    bg.fillStyle(0x0b0c10, 0.92);
+    bg.lineStyle(1.2, 0xd0a878, 0.8);
+    bg.beginPath();
+    bg.moveTo(-6, bgH / 2);
+    bg.lineTo(0, bgH / 2 + 7);
+    bg.lineTo(6, bgH / 2);
+    bg.closePath();
+    bg.fillPath();
+    bg.strokePath();
+    // Hide the top edge of the tail seam.
+    bg.fillStyle(0x0b0c10, 1);
+    bg.fillRect(-5, bgH / 2 - 0.5, 10, 1);
+
+    container.add(bg);
+    container.add(label);
+
+    // Drop-in tween.
+    container.setScale(0.4);
+    container.setAlpha(0);
+    this.tweens.add({
+      targets: container,
+      scale: 1,
+      alpha: 1,
+      duration: 180,
+      ease: "Back.easeOut",
+    });
+
+    // Lingering display time scales with length so short barks fade
+    // fast and longer messages stick around.
+    const displayMs = Math.max(1800, Math.min(4500, 1400 + display.length * 55));
+    this.speechBubbles.set(ownerId, {
+      container,
+      ownerId,
+      expireAt: this.time.now + displayMs,
+    });
+  }
+
+  /** Track + fade speech bubbles. Called from `update`. */
+  private updateSpeechBubbles(timeMs: number): void {
+    for (const [id, bubble] of this.speechBubbles) {
+      const view = this.tanks.get(id);
+      if (!view) {
+        bubble.container.destroy();
+        this.speechBubbles.delete(id);
+        continue;
+      }
+      bubble.container.setPosition(view.container.x, view.container.y - 50);
+      const remaining = bubble.expireAt - timeMs;
+      if (remaining <= 0) {
+        this.tweens.add({
+          targets: bubble.container,
+          alpha: 0,
+          scale: 0.8,
+          duration: 220,
+          onComplete: () => bubble.container.destroy(),
+        });
+        this.speechBubbles.delete(id);
+      } else if (remaining < 400) {
+        bubble.container.setAlpha(remaining / 400);
+      }
+    }
+  }
+
   private spawnExplosion(x: number, y: number, radius: number, tint: number): void {
-    // 1) Instant white flash — briefly washes out the area so the hit reads.
-    const flash = this.add
+    // 1) Pre-flash — sharp bright white disc that blinks for a single
+    //    frame so the detonation reads with weight.
+    const preflash = this.add
       .image(x, y, "smoke")
       .setBlendMode(Phaser.BlendModes.ADD)
       .setTint(0xffffff)
-      .setDisplaySize(radius * 2.4, radius * 2.4)
-      .setDepth(8);
+      .setDisplaySize(radius * 3.1, radius * 3.1)
+      .setDepth(9);
     this.tweens.add({
-      targets: flash,
+      targets: preflash,
       alpha: 0,
-      scale: flash.scale * 1.4,
-      duration: 130,
-      onComplete: () => flash.destroy(),
+      scale: preflash.scale * 1.8,
+      duration: 90,
+      ease: "Quad.easeOut",
+      onComplete: () => preflash.destroy(),
     });
 
-    // 2) Expanding fireball (orange/yellow disc that fades to smoke).
+    // 2) Main fireball — warm orange layer.
     const fireball = this.add
       .image(x, y, "smoke")
       .setBlendMode(Phaser.BlendModes.ADD)
-      .setTint(0xffb24a)
+      .setTint(0xffc458)
       .setDisplaySize(radius * 0.6, radius * 0.6)
-      .setDepth(7);
+      .setDepth(8);
     this.tweens.add({
       targets: fireball,
-      displayWidth: radius * 2.2,
-      displayHeight: radius * 2.2,
+      displayWidth: radius * 2.6,
+      displayHeight: radius * 2.6,
       alpha: 0,
-      duration: 380,
+      duration: 520,
       ease: "Cubic.easeOut",
       onComplete: () => fireball.destroy(),
     });
 
-    // 3) Shockwave ring (expanding white circle outline).
-    const ring = this.add.graphics().setDepth(7);
+    // 3) Inner hot core — saturated yellow on top for intensity.
+    const core = this.add
+      .image(x, y, "smoke")
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(0xfff2b0)
+      .setDisplaySize(radius * 0.4, radius * 0.4)
+      .setDepth(9);
+    this.tweens.add({
+      targets: core,
+      displayWidth: radius * 1.3,
+      displayHeight: radius * 1.3,
+      alpha: 0,
+      duration: 280,
+      ease: "Cubic.easeOut",
+      onComplete: () => core.destroy(),
+    });
+
+    // 4) Weapon-tint tone layer — subtle hue wash based on the weapon.
+    const toneTint = this.add
+      .image(x, y, "smoke")
+      .setBlendMode(Phaser.BlendModes.ADD)
+      .setTint(tint)
+      .setDisplaySize(radius * 0.9, radius * 0.9)
+      .setAlpha(0.75)
+      .setDepth(8);
+    this.tweens.add({
+      targets: toneTint,
+      displayWidth: radius * 2.8,
+      displayHeight: radius * 2.8,
+      alpha: 0,
+      duration: 600,
+      ease: "Quad.easeOut",
+      onComplete: () => toneTint.destroy(),
+    });
+
+    // 5) Two shockwave rings — outer white sonic + inner tint ring
+    //    travelling at slightly different speeds for a proper "boom".
+    const ring = this.add.graphics().setDepth(8);
     this.tweens.add({
       targets: ring,
       alpha: 0,
-      duration: 420,
+      duration: 560,
       onComplete: () => ring.destroy(),
     });
     this.tweens.add({
-      targets: { r: radius * 0.3 },
-      r: radius * 1.6,
-      duration: 400,
+      targets: { r: radius * 0.25 },
+      r: radius * 1.95,
+      duration: 540,
+      ease: "Cubic.easeOut",
       onUpdate: (tw) => {
-        const r = tw.getValue() ?? radius;
+        const r = (tw.getValue() ?? radius) as number;
         ring.clear();
-        ring.lineStyle(3, 0xffe6c4, ring.alpha);
+        ring.lineStyle(3.5, 0xffe6c4, ring.alpha);
         ring.strokeCircle(x, y, r);
-        ring.lineStyle(1.5, tint, ring.alpha * 0.7);
-        ring.strokeCircle(x, y, r * 0.85);
+        ring.lineStyle(1.6, tint, ring.alpha * 0.75);
+        ring.strokeCircle(x, y, r * 0.82);
+        // Faint dust ring trailing behind.
+        ring.lineStyle(1.2, 0x8a6a3a, ring.alpha * 0.55);
+        ring.strokeCircle(x, y, r * 1.15);
       },
     });
 
-    // 4) Hot spark burst.
+    // 6) Ground-slam dust halo — brief wide flat disc along the ground.
+    const dustHalo = this.add
+      .image(x, y + 2, "smoke")
+      .setTint(0x6a4e2a)
+      .setAlpha(0.6)
+      .setDisplaySize(radius * 0.8, radius * 0.3)
+      .setDepth(7);
+    this.tweens.add({
+      targets: dustHalo,
+      displayWidth: radius * 3.4,
+      displayHeight: radius * 0.9,
+      alpha: 0,
+      duration: 900,
+      ease: "Quad.easeOut",
+      onComplete: () => dustHalo.destroy(),
+    });
+
+    // Particle emitters are all created at world origin (0, 0) so the
+    // `explode(count, x, y)` call sets the spawn point unambiguously in
+    // world coords. Creating an emitter at (x, y) *and* then calling
+    // explode(count, x, y) can double-apply positions under some Phaser
+    // versions — this pattern avoids that class of bug entirely.
+
+    // 7) Hot spark burst — more sparks, further range.
     const sparks = this.add
-      .particles(x, y, "spark", {
-        lifespan: 700,
-        speed: { min: 120, max: 340 },
-        scale: { start: 1.6, end: 0 },
+      .particles(0, 0, "spark", {
+        lifespan: { min: 550, max: 950 },
+        speed: { min: 150, max: 440 },
+        scale: { start: 1.8, end: 0 },
         tint: [tint, 0xffffff, 0xffb24a, 0xff5a2a],
         blendMode: Phaser.BlendModes.ADD,
         emitting: false,
       })
-      .setDepth(8);
-    sparks.explode(34 + Math.floor(radius / 8), x, y);
+      .setDepth(9);
+    sparks.explode(50 + Math.floor(radius / 5), x, y);
 
-    // 5) Dirt/rock debris tumbling from the crater.
+    // 8) Glowing embers — slower, lingering sparks that tumble through
+    //    gravity so the aftermath reads like a real blast.
+    const embers = this.add
+      .particles(0, 0, "spark", {
+        lifespan: { min: 1200, max: 2000 },
+        speed: { min: 60, max: 220 },
+        angle: { min: 230, max: 310 },
+        gravityY: 360,
+        scale: { start: 0.9, end: 0 },
+        tint: [0xffb24a, 0xff7030, 0xc03418],
+        blendMode: Phaser.BlendModes.ADD,
+        alpha: { start: 1, end: 0 },
+        emitting: false,
+      })
+      .setDepth(8);
+    embers.explode(Math.round(20 + radius / 6), x, y);
+
+    // 9) Dirt/rock debris tumbling from the crater.
     const debris = this.add
-      .particles(x, y - 6, "debris_chunk", {
-        lifespan: { min: 700, max: 1400 },
-        speed: { min: 160, max: 360 },
+      .particles(0, 0, "debris_chunk", {
+        lifespan: { min: 900, max: 1800 },
+        speed: { min: 180, max: 420 },
         angle: { min: 210, max: 330 },
-        gravityY: 900,
-        scale: { start: 1.0, end: 0.6 },
-        rotate: { start: 0, end: 360 },
-        tint: [0x5a3b1f, 0x3a2513, 0x2a1608],
+        gravityY: 1100,
+        scale: { start: 1.15, end: 0.55 },
+        rotate: { start: 0, end: 540 },
+        tint: [0x5a3b1f, 0x3a2513, 0x2a1608, 0x7a5532],
         emitting: false,
       })
       .setDepth(6);
-    debris.explode(Math.round(radius / 4), x, y - 6);
+    debris.explode(Math.round(radius / 3.2), x, y - 6);
 
-    // 6) Rising smoke pillar.
+    // 10) Rising smoke pillar — taller, more volumes, drifts sideways.
     const smoke = this.add
-      .particles(x, y - 4, "smoke", {
-        lifespan: 1200,
-        speedX: { min: -30, max: 30 },
-        speedY: { min: -120, max: -60 },
-        scale: { start: 0.9, end: 2.6 },
-        tint: [0x3a3a3a, 0x22201c, 0x4a3a28],
-        alpha: { start: 0.85, end: 0 },
+      .particles(0, 0, "smoke", {
+        lifespan: { min: 1600, max: 2400 },
+        speedX: { min: -60, max: 60 },
+        speedY: { min: -160, max: -70 },
+        scale: { start: 0.85, end: 3.4 },
+        tint: [0x3a3a3a, 0x22201c, 0x4a3a28, 0x6a5238],
+        alpha: { start: 0.9, end: 0 },
         emitting: false,
       })
       .setDepth(5);
-    smoke.explode(22, x, y - 4);
+    smoke.explode(Math.round(30 + radius / 7), x, y - 4);
 
-    this.time.delayedCall(1600, () => {
+    // 11) Low-lying dust cloud that settles slowly, biome-ground-toned.
+    const dust = this.add
+      .particles(0, 0, "smoke", {
+        lifespan: { min: 900, max: 1500 },
+        speedX: { min: -130, max: 130 },
+        speedY: { min: -20, max: 10 },
+        scale: { start: 0.6, end: 2.2 },
+        tint: [0x8a6a3a, 0x6a4a20, 0x9a7a4a],
+        alpha: { start: 0.5, end: 0 },
+        emitting: false,
+      })
+      .setDepth(5);
+    dust.explode(Math.round(radius / 6), x, y - 2);
+
+    this.time.delayedCall(2500, () => {
       sparks.destroy(); smoke.destroy(); debris.destroy();
+      embers.destroy(); dust.destroy();
     });
   }
+}
+
+// ───────────────────────── helpers ─────────────────────────
+
+function lerpColor(a: number, b: number, t: number): number {
+  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
+  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return (r << 16) | (g << 8) | bl;
+}
+function shade(c: number, f: number): number {
+  const r = Math.max(0, Math.min(255, ((c >> 16) & 0xff) * f));
+  const g = Math.max(0, Math.min(255, ((c >> 8) & 0xff) * f));
+  const b = Math.max(0, Math.min(255, (c & 0xff) * f));
+  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
 }

@@ -1,33 +1,44 @@
 import { useEffect, useRef, useState } from "react";
 import { Sound, type NowPlaying } from "../game/audio/Sound";
 
-const LS_KEY = "artillery:musicPlayer:v2";
+const LS_KEY = "artillery:musicPlayer:v3";
 const DRAG_THRESHOLD_PX = 5;
 
-interface Pos { x: number; y: number; collapsed: boolean; }
+type Mode = "docked" | "floating";
 
-function defaultPos(): Pos {
+interface State {
+  mode: Mode;
+  /** Floating window position. Ignored in docked mode. */
+  x: number;
+  y: number;
+}
+
+function defaultState(): State {
   return {
+    mode: "docked",
     x: 16,
     y: Math.max(160, window.innerHeight - 260),
-    collapsed: false,
   };
 }
 
-function loadPos(): Pos {
+function loadState(): State {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return defaultPos();
+    if (!raw) return defaultState();
     const parsed = JSON.parse(raw);
-    if (typeof parsed.x === "number" && typeof parsed.y === "number") {
+    if (parsed && (parsed.mode === "docked" || parsed.mode === "floating")) {
       return {
-        x: Math.max(4, Math.min(window.innerWidth - 40, parsed.x)),
-        y: Math.max(60, Math.min(window.innerHeight - 40, parsed.y)),
-        collapsed: !!parsed.collapsed,
+        mode: parsed.mode,
+        x: typeof parsed.x === "number"
+          ? Math.max(4, Math.min(window.innerWidth - 40, parsed.x))
+          : 16,
+        y: typeof parsed.y === "number"
+          ? Math.max(60, Math.min(window.innerHeight - 40, parsed.y))
+          : Math.max(160, window.innerHeight - 260),
       };
     }
   } catch { /* ignore */ }
-  return defaultPos();
+  return defaultState();
 }
 
 function clamp(lo: number, hi: number, v: number): number {
@@ -35,29 +46,21 @@ function clamp(lo: number, hi: number, v: number): number {
 }
 
 /**
- * Draggable now-playing widget.
+ * Music widget with two layouts:
  *
- * Drag model (intentionally simple, after several bug-ridden rewrites):
+ *  • **docked** — a thin bar pinned to the bottom of the screen. Fixed
+ *    position, not draggable. Default for new users.
+ *  • **floating** — a compact panel the user can drag around. Pop out
+ *    from the docked bar via the ⇱ button; dock back via the ⇲ button
+ *    on the panel's header grip row.
  *
- *  • Everything lives in the pointerdown closure — drag state, listener
- *    cleanup, and the final "tap → expand" decision. No shared refs or
- *    pointer-capture APIs to get stuck.
- *  • Window listeners for pointermove / pointerup / pointercancel so the
- *    gesture survives the cursor leaving the element (chat overlay, game
- *    canvas, browser chrome, etc.). stopPropagation on other elements
- *    only affects pointerdown, and that initial event already fired.
- *  • A single `.mp-dragging` class on <html> pins the global cursor to
- *    `grabbing` while a real drag is active.
- *  • Clean-up on unmount strips the class in case the component is
- *    yanked mid-drag (route change, hot reload).
- *
- * Collapsed mode treats any tap on the bubble as a drag-or-expand. In
- * expanded mode only the `[data-drag-handle]` (⋮⋮ grip) starts a drag;
- * buttons / scrubber / text all keep their native behaviour.
+ * Drag is only active in floating mode and uses window listeners inside
+ * the pointerdown closure so the gesture survives the cursor crossing
+ * overlays, game canvas, or off-screen.
  */
 export function MusicPlayer(): JSX.Element | null {
   const [info, setInfo] = useState<NowPlaying | null>(null);
-  const [pos, setPos] = useState<Pos>(loadPos);
+  const [state, setState] = useState<State>(loadState);
   const [, setScrubberTick] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
@@ -75,15 +78,22 @@ export function MusicPlayer(): JSX.Element | null {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem(LS_KEY, JSON.stringify(pos));
-  }, [pos]);
+    localStorage.setItem(LS_KEY, JSON.stringify(state));
+  }, [state]);
+
+  // Lets the app's CSS push bottom UI (weapon tray, fire button, chat
+  // panel) above the docked bar so they don't get covered.
+  useEffect(() => {
+    document.documentElement.classList.toggle("mp-docked", state.mode === "docked");
+    return () => document.documentElement.classList.remove("mp-docked");
+  }, [state.mode]);
 
   useEffect(() => {
     const onResize = () => {
       const el = rootRef.current;
       const w = el?.offsetWidth ?? 240;
       const h = el?.offsetHeight ?? 160;
-      setPos((p) => ({
+      setState((p) => ({
         ...p,
         x: clamp(4, window.innerWidth - w - 4, p.x),
         y: clamp(60, window.innerHeight - h - 4, p.y),
@@ -101,20 +111,16 @@ export function MusicPlayer(): JSX.Element | null {
   }, []);
 
   const beginDrag = (e: React.PointerEvent<HTMLDivElement>) => {
-    // Left click or touch only. Right click should never start a drag.
     if (e.pointerType === "mouse" && e.button !== 0) return;
+    if (state.mode !== "floating") return;
 
     const root = rootRef.current;
     if (!root) return;
 
     const targetEl = e.target as HTMLElement;
-    // Interactive controls (buttons, scrubber) handle their own input.
     if (targetEl.closest("[data-no-drag]")) return;
-
-    // In expanded mode only the grip starts a drag. In collapsed mode
-    // the entire bubble is draggable (and a tap expands it).
-    const isCollapsed = pos.collapsed;
-    if (!isCollapsed && !targetEl.closest("[data-drag-handle]")) return;
+    // Only the grip starts a drag in floating mode.
+    if (!targetEl.closest("[data-drag-handle]")) return;
 
     const rect = root.getBoundingClientRect();
     const offX = e.clientX - rect.left;
@@ -123,7 +129,6 @@ export function MusicPlayer(): JSX.Element | null {
     const startY = e.clientY;
     const width = rect.width;
     const height = rect.height;
-    const startedCollapsed = isCollapsed;
     let dragging = false;
 
     const onMove = (ev: PointerEvent) => {
@@ -137,24 +142,15 @@ export function MusicPlayer(): JSX.Element | null {
       }
       const nx = clamp(4, window.innerWidth - width - 4, ev.clientX - offX);
       const ny = clamp(60, window.innerHeight - height - 4, ev.clientY - offY);
-      setPos((p) => ({ ...p, x: nx, y: ny }));
+      setState((p) => ({ ...p, x: nx, y: ny }));
     };
 
-    const cleanup = () => {
+    const onEnd = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onEnd);
       window.removeEventListener("pointercancel", onEnd);
       document.documentElement.classList.remove("mp-dragging");
       document.body.style.userSelect = "";
-    };
-
-    const onEnd = () => {
-      cleanup();
-      // A tap (no movement past the threshold) on the collapsed bubble
-      // expands it. Taps on the expanded grip do nothing.
-      if (!dragging && startedCollapsed) {
-        setPos((p) => ({ ...p, collapsed: false }));
-      }
     };
 
     window.addEventListener("pointermove", onMove);
@@ -169,11 +165,9 @@ export function MusicPlayer(): JSX.Element | null {
     if (dur > 0) Sound.seek(ratio * dur);
   };
 
-  // Render the chrome *immediately*. Music starts after a user gesture
-  // (browser autoplay policy), so `info` is null for a beat on mount.
-  // Hiding the widget until it populates made the player feel laggy and
-  // "glitchy" — instead we show a placeholder and light up the controls
-  // when audio is available.
+  const setMode = (mode: Mode) => setState((s) => ({ ...s, mode }));
+
+  // Render the chrome immediately even before Sound subscription fires.
   const hasTrack = !!info;
   const paused = info?.paused ?? true;
   const trackTitle = info?.track.title ?? "Awaiting track…";
@@ -185,121 +179,148 @@ export function MusicPlayer(): JSX.Element | null {
   const posSec = hasTrack ? (paused ? info!.position : Sound.position()) : 0;
   const pct = hasTrack ? clamp(0, 1, posSec / dur) : 0;
 
+  const controls = (
+    <>
+      <button
+        data-no-drag
+        tabIndex={-1}
+        className="mp-btn"
+        disabled={!hasTrack}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.previous(); }}
+        title="Previous track"
+        aria-label="Previous track"
+      >◀◀</button>
+      <button
+        data-no-drag
+        tabIndex={-1}
+        className="mp-btn mp-play"
+        disabled={!hasTrack}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.togglePause(); }}
+        title={paused ? "Play" : "Pause"}
+        aria-label={paused ? "Play" : "Pause"}
+      >{paused ? "▶" : "❚❚"}</button>
+      <button
+        data-no-drag
+        tabIndex={-1}
+        className="mp-btn"
+        disabled={!hasTrack}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.next(); }}
+        title="Next track"
+        aria-label="Next track"
+      >▶▶</button>
+      <button
+        data-no-drag
+        tabIndex={-1}
+        className={`mp-btn mp-mute ${muted ? "muted" : ""}`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.toggleMuted("music"); }}
+        title={muted ? "Un-mute music" : "Mute music"}
+        aria-label={muted ? "Un-mute music" : "Mute music"}
+      >
+        <span
+          className="icon-mask mp-mute-icon"
+          style={{
+            WebkitMaskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
+            maskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
+          }}
+        />
+      </button>
+    </>
+  );
+
+  if (state.mode === "docked") {
+    return (
+      <div
+        ref={rootRef}
+        className="music-player docked"
+      >
+        <span className="mp-dock-glyph" aria-hidden>♪</span>
+        <div className={`mp-dock-id ${hasTrack ? "" : "idle"}`}>
+          <span className="mp-title">{trackTitle}</span>
+          <span className="mp-artist">{trackArtist}</span>
+        </div>
+        <div
+          data-no-drag
+          className="mp-scrub mp-scrub-dock"
+          onClick={hasTrack ? onScrub : undefined}
+        >
+          <div className="mp-scrub-fill" style={{ width: `${pct * 100}%` }} />
+        </div>
+        <div className="mp-dock-time">{fmt(posSec)} / {fmt(dur)}</div>
+        <div className="mp-buttons">{controls}</div>
+        <button
+          data-no-drag
+          tabIndex={-1}
+          className="mp-mode-btn"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => { (e.currentTarget as HTMLElement).blur(); setMode("floating"); }}
+          title="Pop out music player"
+          aria-label="Pop out music player"
+        >⇱</button>
+      </div>
+    );
+  }
+
+  // Floating
   return (
     <div
       ref={rootRef}
-      className={`music-player ${pos.collapsed ? "collapsed" : ""}`}
+      className="music-player floating"
       style={{
-        left: pos.x,
-        top: pos.y,
+        left: state.x,
+        top: state.y,
         right: "auto",
         bottom: "auto",
         touchAction: "none",
       }}
       onPointerDown={beginDrag}
     >
-      {pos.collapsed ? (
-        <span className="mp-toggle" aria-hidden>♪</span>
-      ) : (
-        <>
-          <div className="mp-head">
-            <span
-              className="mp-grip"
-              data-drag-handle
-              title="Drag to move"
-              aria-hidden
-            >⋮⋮</span>
-            <span className="mp-label">
-              NOW PLAYING · {contextLabel}
-              {hasTrack ? ` · ${trackIndex}/${poolSize}` : ""}
-            </span>
-            <button
-              data-no-drag
-              tabIndex={-1}
-              className="mp-collapse"
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => {
-                (e.currentTarget as HTMLElement).blur();
-                setPos((v) => ({ ...v, collapsed: true }));
-              }}
-              title="Hide player"
-            >
-              —
-            </button>
-          </div>
-          <div className={`mp-track ${hasTrack ? "" : "idle"}`}>
-            <span className="mp-title">{trackTitle}</span>
-            <span className="mp-artist">{trackArtist}</span>
-          </div>
-          <div
-            data-no-drag
-            className="mp-scrub"
-            onPointerDown={(e) => e.stopPropagation()}
-            onClick={hasTrack ? onScrub : undefined}
-          >
-            <div className="mp-scrub-fill" style={{ width: `${pct * 100}%` }} />
-          </div>
-          <div className="mp-time">
-            <span>{fmt(posSec)}</span>
-            <span>{fmt(dur)}</span>
-          </div>
-          <div className="mp-buttons">
-            <button
-              data-no-drag
-              tabIndex={-1}
-              disabled={!hasTrack}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.previous(); }}
-              title="Previous track"
-            >
-              ◀◀
-            </button>
-            <button
-              data-no-drag
-              tabIndex={-1}
-              className="mp-play"
-              disabled={!hasTrack}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.togglePause(); }}
-              title={paused ? "Play" : "Pause"}
-            >
-              {paused ? "▶" : "❚❚"}
-            </button>
-            <button
-              data-no-drag
-              tabIndex={-1}
-              disabled={!hasTrack}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.next(); }}
-              title="Next track"
-            >
-              ▶▶
-            </button>
-            <button
-              data-no-drag
-              tabIndex={-1}
-              className={`mp-mute ${muted ? "muted" : ""}`}
-              onPointerDown={(e) => e.stopPropagation()}
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={(e) => { (e.currentTarget as HTMLElement).blur(); Sound.toggleMuted("music"); }}
-              title={muted ? "Un-mute music" : "Mute music"}
-              aria-label={muted ? "Un-mute music" : "Mute music"}
-            >
-              <span
-                className="icon-mask mp-mute-icon"
-                style={{
-                  WebkitMaskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
-                  maskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
-                }}
-              />
-            </button>
-          </div>
-        </>
-      )}
+      <div className="mp-head">
+        <span
+          className="mp-grip"
+          data-drag-handle
+          title="Drag to move"
+          aria-hidden
+        >⋮⋮</span>
+        <span className="mp-label">
+          NOW PLAYING · {contextLabel}
+          {hasTrack ? ` · ${trackIndex}/${poolSize}` : ""}
+        </span>
+        <button
+          data-no-drag
+          tabIndex={-1}
+          className="mp-mode-btn"
+          onPointerDown={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={(e) => { (e.currentTarget as HTMLElement).blur(); setMode("docked"); }}
+          title="Dock to bottom bar"
+          aria-label="Dock to bottom bar"
+        >⇲</button>
+      </div>
+      <div className={`mp-track ${hasTrack ? "" : "idle"}`}>
+        <span className="mp-title">{trackTitle}</span>
+        <span className="mp-artist">{trackArtist}</span>
+      </div>
+      <div
+        data-no-drag
+        className="mp-scrub"
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={hasTrack ? onScrub : undefined}
+      >
+        <div className="mp-scrub-fill" style={{ width: `${pct * 100}%` }} />
+      </div>
+      <div className="mp-time">
+        <span>{fmt(posSec)}</span>
+        <span>{fmt(dur)}</span>
+      </div>
+      <div className="mp-buttons">{controls}</div>
     </div>
   );
 }

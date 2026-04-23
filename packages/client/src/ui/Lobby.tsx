@@ -191,7 +191,7 @@ export function Lobby({
             />
             <Slider
               label="Starting HP"
-              min={50} max={200} step={10}
+              min={100} max={600} step={25}
               value={startingHp}
               onChange={(v) => onSettings({ startingHp: v })}
             />

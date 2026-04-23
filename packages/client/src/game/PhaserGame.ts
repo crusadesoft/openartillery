@@ -47,6 +47,11 @@ export class PhaserGame {
         },
       },
     });
+    // Dev convenience — exposes the Phaser game + Colyseus room on
+    // window so automated tests (and console debugging) can drive the
+    // battle without reaching through React refs. No effect on prod UX.
+    (window as unknown as { __game?: unknown; __room?: unknown }).__game = this.game;
+    (window as unknown as { __game?: unknown; __room?: unknown }).__room = room;
   }
 
   destroy(): void {

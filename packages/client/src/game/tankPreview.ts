@@ -11,11 +11,21 @@
  * preview stay consistent.
  */
 
-export type BodyStyle = "heavy" | "light" | "assault" | "scout" | "siege";
-export type TurretStyle = "standard" | "angular" | "low" | "wedge" | "dome";
-export type BarrelStyle = "standard" | "heavy" | "long" | "sniper" | "stubby";
-export type PatternStyle = "solid" | "stripes" | "tiger" | "digital" | "chevron";
-export type DecalStyle = "none" | "number" | "star" | "skull" | "crosshair";
+export type BodyStyle =
+  | "heavy" | "light" | "assault" | "scout" | "siege"
+  | "bunker" | "recon" | "speeder";
+export type TurretStyle =
+  | "standard" | "angular" | "low" | "wedge" | "dome"
+  | "box" | "tall" | "twin";
+export type BarrelStyle =
+  | "standard" | "heavy" | "long" | "sniper" | "stubby"
+  | "mortar" | "twin" | "rail";
+export type PatternStyle =
+  | "solid" | "stripes" | "tiger" | "digital" | "chevron"
+  | "splinter" | "urban" | "hex";
+export type DecalStyle =
+  | "none" | "number" | "star" | "skull" | "crosshair"
+  | "cross" | "flame" | "shield";
 
 export interface TankPreviewOpts {
   x: number;             // left edge of tank footprint (incl. treads)
@@ -34,24 +44,34 @@ export interface TankPreviewOpts {
    *  sprite (used by the in-game Phaser pipeline so the barrel can
    *  rotate independently for aim). */
   skipBarrel?: boolean;
+  /** Rotate the barrel around its breech pivot by this angle (radians,
+   *  canvas convention: +y down, positive = CW on screen). 0 = horizontal
+   *  pointing toward the muzzle end. Used by the Arsenal preview to
+   *  match the barrel angle to the initial projectile direction. */
+  barrelAngleRad?: number;
 }
 
 /** Canonical proportion maps — shared with the in-game textures so the
  *  silhouette is identical. */
 const hullFracMap: Record<BodyStyle, number> = {
   heavy: 0.34, light: 0.30, assault: 0.26, scout: 0.28, siege: 0.38,
+  bunker: 0.42, recon: 0.30, speeder: 0.26,
 };
 const turretWMap: Record<TurretStyle, number> = {
   standard: 0.34, angular: 0.36, low: 0.42, wedge: 0.38, dome: 0.32,
+  box: 0.36, tall: 0.28, twin: 0.40,
 };
 const turretHMap: Record<TurretStyle, number> = {
   standard: 0.22, angular: 0.20, low: 0.14, wedge: 0.22, dome: 0.28,
+  box: 0.24, tall: 0.32, twin: 0.22,
 };
 const barrelLenMap: Record<BarrelStyle, number> = {
   standard: 0.46, heavy: 0.42, long: 0.58, sniper: 0.66, stubby: 0.32,
+  mortar: 0.22, twin: 0.50, rail: 0.72,
 };
 const barrelThickMap: Record<BarrelStyle, number> = {
   standard: 0.05, heavy: 0.065, long: 0.05, sniper: 0.038, stubby: 0.085,
+  mortar: 0.11, twin: 0.06, rail: 0.032,
 };
 /** Reference width used when the in-game barrel sprite is baked on its
  *  own canvas. All length/thickness ratios use this as the denominator
@@ -76,16 +96,20 @@ export function drawTankPreview(
   // Layout — hull height is a fraction of width so treads always scale.
   const slopeFracMap: Record<BodyStyle, number> = {
     heavy: 0.17, light: 0.26, assault: 0.11, scout: 0.32, siege: 0.20,
+    bunker: 0.06, recon: 0.38, speeder: 0.30,
   };
   const wheelMap: Record<BodyStyle, number> = {
     heavy: 6, light: 4, assault: 5, scout: 4, siege: 7,
+    bunker: 6, recon: 5, speeder: 4,
   };
   const hullH = W * hullFracMap[bodyStyle];
   const treadH = Math.max(8, W * 0.13);
   const slopeW = W * slopeFracMap[bodyStyle];
   const wheelCount = wheelMap[bodyStyle];
-  const hasSkirt = bodyStyle === "assault" || bodyStyle === "siege";
-  const hasGlacis = bodyStyle !== "light" && bodyStyle !== "scout";
+  const hasSkirt =
+    bodyStyle === "assault" || bodyStyle === "siege" || bodyStyle === "bunker";
+  const hasGlacis =
+    bodyStyle !== "light" && bodyStyle !== "scout" && bodyStyle !== "speeder";
 
   const hullTop = y;
   const hullBot = y + hullH;
@@ -226,6 +250,76 @@ export function drawTankPreview(
         ctx.closePath();
         ctx.fill();
       }
+    } else if (pattern === "splinter") {
+      // Angular shard pattern — German splinter camo. Use deterministic
+      // pseudo-noise to place and orient the shards.
+      const shardCount = Math.max(6, Math.floor(hullInnerW / 6));
+      for (let i = 0; i < shardCount; i++) {
+        const seed = i * 374761393;
+        const sx = hullLeft + ((seed & 0xff) / 0xff) * hullInnerW;
+        const sy = hullTop + (((seed >> 8) & 0xff) / 0xff) * hullH;
+        const w = Math.max(3, hullInnerW * 0.06) * (0.7 + ((seed >> 16) & 0xff) / 0xff * 0.7);
+        const h = Math.max(2, hullH * 0.22) * (0.6 + ((seed >> 20) & 0xff) / 0xff * 0.6);
+        const rot = (((seed >> 24) & 0xff) / 0xff - 0.5) * 0.6;
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(rot);
+        ctx.beginPath();
+        ctx.moveTo(-w / 2, -h / 2);
+        ctx.lineTo(w / 2, -h / 2 + h * 0.25);
+        ctx.lineTo(w / 2 - w * 0.2, h / 2);
+        ctx.lineTo(-w / 2 + w * 0.1, h / 2 - h * 0.15);
+        ctx.closePath();
+        ctx.fill();
+        ctx.restore();
+      }
+    } else if (pattern === "urban") {
+      // Rectangular block camo — stacked boxy patches. Use unsigned
+      // 32-bit coercion so pseudo-noise lands in [0, 1) every time
+      // instead of occasionally being negative (which made the whole
+      // pattern read as solid).
+      const rng = (s: number) => (((s * 2654435761) >>> 0) / 0xffffffff);
+      const cols = Math.max(4, Math.floor(hullInnerW / 7));
+      const rows = Math.max(2, Math.floor(hullH / 3.5));
+      const cellW = hullInnerW / cols;
+      const cellH = hullH / rows;
+      for (let cy = 0; cy < rows; cy++) {
+        for (let cx = 0; cx < cols; cx++) {
+          const r = rng(cx * 97 + cy * 31 + 13);
+          if (r > 0.45) {
+            ctx.fillRect(
+              hullLeft + cx * cellW,
+              hullTop + cy * cellH,
+              cellW * 0.9,
+              cellH * 0.9,
+            );
+          }
+        }
+      }
+    } else if (pattern === "hex") {
+      // Honeycomb hex cells — modern plate kit feel.
+      const r = Math.max(2.2, hullH * 0.18);
+      const dx = r * Math.sqrt(3);
+      const dy = r * 1.5;
+      for (let row = 0; row * dy < hullH + r; row++) {
+        for (let col = 0; col * dx < hullInnerW + dx; col++) {
+          const cx = hullLeft + col * dx + (row % 2 ? dx / 2 : 0);
+          const cy = hullTop + row * dy;
+          if (cx > hullRight || cy > hullBot) continue;
+          const seed = row * 101 + col * 37;
+          if ((seed * 2654435761 >>> 0) / 0xffffffff < 0.45) {
+            ctx.beginPath();
+            for (let k = 0; k < 6; k++) {
+              const a = (k / 6) * Math.PI * 2 + Math.PI / 6;
+              const px = cx + Math.cos(a) * r;
+              const py = cy + Math.sin(a) * r;
+              if (k === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+            }
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+      }
     }
     ctx.restore();
   }
@@ -327,6 +421,57 @@ export function drawTankPreview(
   } else if (turretStyle === "dome") {
     // Tall ellipse with a raised cupola disc on top.
     ctx.ellipse(turretCx, turretCy, turretW / 2, turretH / 2, 0, 0, Math.PI * 2);
+  } else if (turretStyle === "box") {
+    // T-profile casemate: squared-off lower block plus a narrower
+    // commander cupola riding on top. Reads clearly as a box turret
+    // even from across the map.
+    const lowerW = turretW;
+    const upperW = turretW * 0.55;
+    const upperH = turretH * 0.55;
+    const lowerH = turretH * 0.9;
+    const lB = turretCx - lowerW / 2;
+    const rB = turretCx + lowerW / 2;
+    const topB = turretCy - lowerH * 0.25;
+    const botB = turretCy + lowerH * 0.75;
+    ctx.moveTo(lB + 2, topB);
+    ctx.lineTo(turretCx - upperW / 2, topB);
+    ctx.lineTo(turretCx - upperW / 2, topB - upperH);
+    ctx.lineTo(turretCx + upperW / 2, topB - upperH);
+    ctx.lineTo(turretCx + upperW / 2, topB);
+    ctx.lineTo(rB - 2, topB);
+    ctx.quadraticCurveTo(rB, topB, rB, topB + 2);
+    ctx.lineTo(rB, botB);
+    ctx.lineTo(lB, botB);
+    ctx.lineTo(lB, topB + 2);
+    ctx.quadraticCurveTo(lB, topB, lB + 2, topB);
+    ctx.closePath();
+  } else if (turretStyle === "tall") {
+    // Stacked pagoda — three progressively narrower tiers. Gives a
+    // genuinely tower-like silhouette rather than "tall ellipse".
+    const w0 = turretW * 1.0;
+    const w1 = turretW * 0.72;
+    const w2 = turretW * 0.38;
+    const h0 = turretH * 0.4;  // base slab
+    const h1 = turretH * 0.38; // mid section
+    const h2 = turretH * 0.28; // top cupola
+    const baseY = turretCy + turretH * 0.5;
+    ctx.moveTo(turretCx - w0 / 2, baseY);
+    ctx.lineTo(turretCx - w0 / 2, baseY - h0);
+    ctx.lineTo(turretCx - w1 / 2, baseY - h0);
+    ctx.lineTo(turretCx - w1 / 2, baseY - h0 - h1);
+    ctx.lineTo(turretCx - w2 / 2, baseY - h0 - h1);
+    ctx.lineTo(turretCx - w2 / 2, baseY - h0 - h1 - h2);
+    ctx.lineTo(turretCx + w2 / 2, baseY - h0 - h1 - h2);
+    ctx.lineTo(turretCx + w2 / 2, baseY - h0 - h1);
+    ctx.lineTo(turretCx + w1 / 2, baseY - h0 - h1);
+    ctx.lineTo(turretCx + w1 / 2, baseY - h0);
+    ctx.lineTo(turretCx + w0 / 2, baseY - h0);
+    ctx.lineTo(turretCx + w0 / 2, baseY);
+    ctx.closePath();
+  } else if (turretStyle === "twin") {
+    // Wider elliptical body with two visible gun ports on the front
+    // face — immediately reads as a dual-mount.
+    ctx.ellipse(turretCx, turretCy, turretW / 2, turretH / 2, 0, 0, Math.PI * 2);
   } else {
     ctx.ellipse(turretCx, turretCy, turretW / 2, turretH / 2, 0, 0, Math.PI * 2);
   }
@@ -343,6 +488,46 @@ export function drawTankPreview(
     ctx.ellipse(turretCx, turretCy - turretH * 0.28, cupR * 0.85, cupR * 0.35, 0, 0, Math.PI * 2);
     ctx.fill();
   }
+  if (turretStyle === "tall") {
+    // Multi-tier bolt band — three horizontal lines across the tower.
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    for (let k = 0; k < 3; k++) {
+      const band = turretCy - turretH * 0.35 + k * (turretH * 0.25);
+      ctx.fillRect(turretCx - turretW / 2 + 2, band, turretW - 4, 1);
+    }
+    // Short antenna stub on top.
+    ctx.strokeStyle = "#0a0a10";
+    ctx.lineWidth = Math.max(0.8, W * 0.006);
+    ctx.beginPath();
+    ctx.moveTo(turretCx, turretCy - turretH / 2);
+    ctx.lineTo(turretCx, turretCy - turretH / 2 - turretH * 0.5);
+    ctx.stroke();
+  }
+  if (turretStyle === "box") {
+    // Rivet row on the front face + a horizontal vision slit.
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    const slitY = turretCy - turretH * 0.1;
+    ctx.fillRect(turretCx - turretW * 0.3, slitY, turretW * 0.6, Math.max(1, turretH * 0.08));
+    for (let k = 0; k < 4; k++) {
+      const bx = turretCx - turretW * 0.3 + k * (turretW * 0.2);
+      ctx.beginPath();
+      ctx.arc(bx, turretCy + turretH * 0.28, Math.max(0.8, W * 0.007), 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+  if (turretStyle === "twin") {
+    // Two dark gun ports on the front face read immediately as a
+    // dual-mount turret. Positioned on the right side (facing +1).
+    const portR = Math.min(turretH * 0.16, turretW * 0.09);
+    const portX = turretCx + turretW * 0.28;
+    ctx.fillStyle = "rgba(0,0,0,0.92)";
+    ctx.beginPath(); ctx.arc(portX, turretCy - turretH * 0.22, portR, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(portX, turretCy + turretH * 0.22, portR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.7)";
+    ctx.lineWidth = 0.8;
+    ctx.beginPath(); ctx.arc(portX, turretCy - turretH * 0.22, portR, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(portX, turretCy + turretH * 0.22, portR, 0, Math.PI * 2); ctx.stroke();
+  }
 
   // Turret crown highlight.
   ctx.fillStyle = "rgba(255,255,255,0.35)";
@@ -356,15 +541,19 @@ export function drawTankPreview(
   ctx.ellipse(turretCx, turretCy + turretH * 0.35, turretW * 0.38, turretH * 0.18, 0, 0, Math.PI * 2);
   ctx.fill();
 
-  // Bolt ring.
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  const bolts = 10;
-  const boltR = Math.max(1, W * 0.007);
-  for (let i = 0; i < bolts; i++) {
-    const a = (i / bolts) * Math.PI * 2;
-    const bx = turretCx + Math.cos(a) * (turretW / 2 - boltR * 3);
-    const by = turretCy + Math.sin(a) * (turretH / 2 - boltR * 2.5);
-    ctx.beginPath(); ctx.arc(bx, by, boltR, 0, Math.PI * 2); ctx.fill();
+  // Bolt ring — only on the rounded/elliptical turrets. Boxy/tiered
+  // shapes get their own rivet detail in their dedicated blocks so a
+  // circular pattern of bolts wouldn't match their silhouette.
+  if (turretStyle !== "box" && turretStyle !== "tall") {
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    const bolts = 10;
+    const boltR = Math.max(1, W * 0.007);
+    for (let i = 0; i < bolts; i++) {
+      const a = (i / bolts) * Math.PI * 2;
+      const bx = turretCx + Math.cos(a) * (turretW / 2 - boltR * 3);
+      const by = turretCy + Math.sin(a) * (turretH / 2 - boltR * 2.5);
+      ctx.beginPath(); ctx.arc(bx, by, boltR, 0, Math.PI * 2); ctx.fill();
+    }
   }
 
   // Periscope.
@@ -436,6 +625,58 @@ export function drawTankPreview(
       ctx.beginPath(); ctx.moveTo(dcx - r, dcy); ctx.lineTo(dcx + r, dcy); ctx.stroke();
       ctx.beginPath(); ctx.moveTo(dcx, dcy - r); ctx.lineTo(dcx, dcy + r); ctx.stroke();
       ctx.beginPath(); ctx.arc(dcx, dcy, r * 0.15, 0, Math.PI * 2); ctx.fill();
+    } else if (decal === "cross") {
+      // Catholic / Latin cross — vertical bar with crossbar in the
+      // upper third. Stencilled with a dark outline like the others.
+      const r = dSize / 2;
+      const armThick = Math.max(1.2, r * 0.22);
+      // Vertical bar.
+      ctx.fillRect(dcx - armThick / 2, dcy - r, armThick, r * 2);
+      ctx.strokeRect(dcx - armThick / 2, dcy - r, armThick, r * 2);
+      // Horizontal crossbar (positioned in the upper third).
+      const crossY = dcy - r * 0.35;
+      const crossLen = r * 1.2;
+      ctx.fillRect(dcx - crossLen / 2, crossY - armThick / 2, crossLen, armThick);
+      ctx.strokeRect(dcx - crossLen / 2, crossY - armThick / 2, crossLen, armThick);
+    } else if (decal === "flame") {
+      // Stylised flame silhouette — bezier curves forming a tongue.
+      const r = dSize / 2;
+      ctx.beginPath();
+      ctx.moveTo(dcx, dcy + r);
+      ctx.bezierCurveTo(
+        dcx - r * 0.9, dcy + r * 0.4,
+        dcx - r * 0.8, dcy - r * 0.2,
+        dcx - r * 0.1, dcy - r * 0.6,
+      );
+      ctx.bezierCurveTo(
+        dcx - r * 0.25, dcy - r * 0.1,
+        dcx + r * 0.4, dcy - r * 0.5,
+        dcx + r * 0.2, dcy - r,
+      );
+      ctx.bezierCurveTo(
+        dcx + r * 0.9, dcy - r * 0.5,
+        dcx + r * 0.9, dcy + r * 0.3,
+        dcx, dcy + r,
+      );
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    } else if (decal === "shield") {
+      // Heraldic shield — rounded top, pointed bottom.
+      const r = dSize / 2;
+      ctx.beginPath();
+      ctx.moveTo(dcx - r * 0.85, dcy - r * 0.8);
+      ctx.lineTo(dcx + r * 0.85, dcy - r * 0.8);
+      ctx.quadraticCurveTo(dcx + r * 0.95, dcy - r * 0.5, dcx + r * 0.8, dcy);
+      ctx.quadraticCurveTo(dcx + r * 0.55, dcy + r * 0.6, dcx, dcy + r);
+      ctx.quadraticCurveTo(dcx - r * 0.55, dcy + r * 0.6, dcx - r * 0.8, dcy);
+      ctx.quadraticCurveTo(dcx - r * 0.95, dcy - r * 0.5, dcx - r * 0.85, dcy - r * 0.8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Horizontal chief band across the top third.
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(dcx - r * 0.75, dcy - r * 0.55, r * 1.5, r * 0.28);
     }
     ctx.restore();
   }
@@ -444,7 +685,16 @@ export function drawTankPreview(
   if (!skipBarrel) {
     const bX = turretCx + turretW * 0.28;
     const bY = turretCy;
-    drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+    const angle = opts.barrelAngleRad ?? 0;
+    if (angle !== 0) {
+      ctx.save();
+      ctx.translate(bX, bY);
+      ctx.rotate(angle);
+      drawBarrelAt(ctx, 0, 0, W, barrelStyle);
+      ctx.restore();
+    } else {
+      drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+    }
   }
 
   ctx.restore();
@@ -464,6 +714,35 @@ function drawBarrelAt(
 ): void {
   const barrelLen = refW * barrelLenMap[barrelStyle];
   const barrelThick = refW * barrelThickMap[barrelStyle];
+
+  if (barrelStyle === "twin") {
+    // Two parallel tubes above + below the pivot line.
+    const sub = barrelThick * 0.45;
+    const gap = barrelThick * 0.3;
+    drawBarrelTube(ctx, bX, bY - gap / 2 - sub / 2, barrelLen, sub, refW, false);
+    drawBarrelTube(ctx, bX, bY + gap / 2 + sub / 2, barrelLen, sub, refW, false);
+    // Shared mantle spans both tubes.
+    ctx.fillStyle = "#15171e";
+    ctx.fillRect(
+      bX - refW * 0.01,
+      bY - barrelThick / 2 - 2,
+      refW * 0.045,
+      barrelThick + 4,
+    );
+    return;
+  }
+  drawBarrelTube(ctx, bX, bY, barrelLen, barrelThick, refW, barrelStyle === "rail");
+}
+
+function drawBarrelTube(
+  ctx: CanvasRenderingContext2D,
+  bX: number,
+  bY: number,
+  barrelLen: number,
+  barrelThick: number,
+  refW: number,
+  isRail: boolean,
+): void {
   const bTop = bY - barrelThick / 2;
 
   // Mantle.
@@ -474,7 +753,7 @@ function drawBarrelAt(
 
   // Barrel body gradient.
   const bGrad = ctx.createLinearGradient(0, bTop, 0, bTop + barrelThick);
-  bGrad.addColorStop(0, "#2d313e");
+  bGrad.addColorStop(0, isRail ? "#3d4356" : "#2d313e");
   bGrad.addColorStop(0.5, "#181a22");
   bGrad.addColorStop(1, "#070810");
   ctx.fillStyle = bGrad;
@@ -486,6 +765,19 @@ function drawBarrelAt(
   // Wear band.
   ctx.fillStyle = "rgba(0,0,0,0.45)";
   ctx.fillRect(bX + barrelLen * 0.45, bTop, Math.max(1, barrelLen * 0.015), barrelThick);
+
+  if (isRail) {
+    // Rail barrel — coil rings along the length + glowing muzzle.
+    ctx.fillStyle = "rgba(255,200,120,0.65)";
+    for (let i = 0.25; i < 1; i += 0.18) {
+      ctx.fillRect(bX + barrelLen * i, bTop - 0.5, 1.5, barrelThick + 1);
+    }
+    ctx.fillStyle = "rgba(120,200,255,0.85)";
+    ctx.fillRect(bX + barrelLen - 3, bTop + barrelThick * 0.15, 3, barrelThick * 0.7);
+    ctx.fillStyle = "rgba(255,255,255,0.7)";
+    ctx.fillRect(bX + barrelLen - 2, bTop + barrelThick * 0.3, 2, barrelThick * 0.4);
+    return;
+  }
 
   // Muzzle brake.
   const muzzleW = Math.max(6, barrelLen * 0.18);
@@ -547,12 +839,11 @@ export function renderLoadoutCanvas(
 
   // Body-proportional sizing so a light hull reads smaller than a heavy
   // one across every surface. Widths follow the in-game hull widths
-  // (heavy 48 / light 40 / assault 50 / scout 34 / siege 54).
-  const bodyWidthMap: Record<BodyStyle, number> = {
-    heavy: 48, light: 40, assault: 50, scout: 34, siege: 54,
-  };
+  // declared in HULL_WIDTHS.
+  const bodyWidthMap: Record<BodyStyle, number> = HULL_WIDTHS;
   const hullFracMap: Record<BodyStyle, number> = {
     heavy: 0.34, light: 0.30, assault: 0.26, scout: 0.28, siege: 0.38,
+    bunker: 0.42, recon: 0.30, speeder: 0.26,
   };
   const treadFrac = 0.13;
   const antennaFrac = 0.34 * 0.45; // matches heavy hull antenna reach
@@ -599,6 +890,7 @@ export function renderLoadoutCanvas(
  *  `shared/constants.ts`. */
 export const HULL_WIDTHS: Record<BodyStyle, number> = {
   heavy: 48, light: 40, assault: 50, scout: 36, siege: 54,
+  bunker: 46, recon: 42, speeder: 34,
 };
 
 export interface HullRenderOpts {

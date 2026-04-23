@@ -1,22 +1,27 @@
-export type BodyStyle = "heavy" | "light" | "assault" | "scout" | "siege";
-export type TurretStyle = "standard" | "angular" | "low" | "wedge" | "dome";
-export type BarrelStyle = "standard" | "heavy" | "long" | "sniper" | "stubby";
-export type PatternStyle = "solid" | "stripes" | "tiger" | "digital" | "chevron";
-export type DecalStyle = "none" | "number" | "star" | "skull" | "crosshair";
+export type BodyStyle =
+  | "heavy" | "light" | "assault" | "scout" | "siege"
+  | "bunker" | "recon" | "speeder";
+export type TurretStyle =
+  | "standard" | "angular" | "low" | "wedge" | "dome"
+  | "box" | "tall" | "twin";
+export type BarrelStyle =
+  | "standard" | "heavy" | "long" | "sniper" | "stubby"
+  | "mortar" | "twin" | "rail";
+export type PatternStyle =
+  | "solid" | "stripes" | "tiger" | "digital" | "chevron"
+  | "splinter" | "urban" | "hex";
+export type DecalStyle =
+  | "none" | "number" | "star" | "skull" | "crosshair"
+  | "cross" | "flame" | "shield";
 
 export interface Loadout {
   body: BodyStyle;
   turret: TurretStyle;
   barrel: BarrelStyle;
-  /** Optional camo / pattern overlay on the hull. */
   pattern: PatternStyle;
-  /** Optional insignia stencilled on the hull side. */
   decal: DecalStyle;
-  /** 0xRRGGBB primary hull color */
   primaryColor: number;
-  /** 0xRRGGBB stripe / accent color */
   accentColor: number;
-  /** 0xRRGGBB secondary pattern colour (for stripes / tiger / etc.) */
   patternColor: number;
 }
 
@@ -26,16 +31,31 @@ export const DEFAULT_LOADOUT_SPEC: Loadout = {
   barrel: "standard",
   pattern: "solid",
   decal: "none",
-  primaryColor: 0x3a2e1b, // field drab
-  accentColor: 0xb28a3d, // brass
-  patternColor: 0x1a140c, // nearly-black for camo breaks
+  primaryColor: 0x3a2e1b,
+  accentColor: 0xb28a3d,
+  patternColor: 0x1a140c,
 };
 
-export const ALL_BODIES: BodyStyle[] = ["heavy", "light", "assault", "scout", "siege"];
-export const ALL_TURRETS: TurretStyle[] = ["standard", "angular", "low", "wedge", "dome"];
-export const ALL_BARRELS: BarrelStyle[] = ["standard", "heavy", "long", "sniper", "stubby"];
-export const ALL_PATTERNS: PatternStyle[] = ["solid", "stripes", "tiger", "digital", "chevron"];
-export const ALL_DECALS: DecalStyle[] = ["none", "number", "star", "skull", "crosshair"];
+export const ALL_BODIES: BodyStyle[] = [
+  "heavy", "light", "assault", "scout", "siege",
+  "bunker", "recon", "speeder",
+];
+export const ALL_TURRETS: TurretStyle[] = [
+  "standard", "angular", "low", "wedge", "dome",
+  "box", "tall", "twin",
+];
+export const ALL_BARRELS: BarrelStyle[] = [
+  "standard", "heavy", "long", "sniper", "stubby",
+  "mortar", "twin", "rail",
+];
+export const ALL_PATTERNS: PatternStyle[] = [
+  "solid", "stripes", "tiger", "digital", "chevron",
+  "splinter", "urban", "hex",
+];
+export const ALL_DECALS: DecalStyle[] = [
+  "none", "number", "star", "skull", "crosshair",
+  "cross", "flame", "shield",
+];
 
 export interface PartDescriptor<T extends string> {
   id: T;
@@ -49,6 +69,9 @@ export const BODY_DESCRIPTORS: Record<BodyStyle, PartDescriptor<BodyStyle>> = {
   assault: { id: "assault", label: "Assault", blurb: "Low-slung hull with full-length track skirts." },
   scout:   { id: "scout",   label: "Scout",   blurb: "Stripped-down recon chassis. Small, fast, exposed." },
   siege:   { id: "siege",   label: "Siege",   blurb: "Seven-wheel heavy-assault hull with maximum frontal armour." },
+  bunker:  { id: "bunker",  label: "Bunker",  blurb: "Squat fortress chassis — thick plate, minimal slope." },
+  recon:   { id: "recon",   label: "Recon",   blurb: "Wedge-nosed spotter hull with an extreme glacis angle." },
+  speeder: { id: "speeder", label: "Speeder", blurb: "Tiny-footprint racer hull. All attitude, no armour." },
 };
 
 export const TURRET_DESCRIPTORS: Record<TurretStyle, PartDescriptor<TurretStyle>> = {
@@ -57,6 +80,9 @@ export const TURRET_DESCRIPTORS: Record<TurretStyle, PartDescriptor<TurretStyle>
   low:      { id: "low",      label: "Low-profile", blurb: "Short, wide squash dome." },
   wedge:    { id: "wedge",    label: "Wedge",       blurb: "Sloped wedge-profile turret. Deflects the eye." },
   dome:     { id: "dome",     label: "Dome",        blurb: "Tall round dome with a raised cupola." },
+  box:      { id: "box",      label: "Box",         blurb: "Brutalist rectangular casemate turret." },
+  tall:     { id: "tall",     label: "Tall",        blurb: "Tower-profile turret with bolt tiers." },
+  twin:     { id: "twin",     label: "Twin Mount",  blurb: "Primary dome with a visible secondary cannon." },
 };
 
 export const BARREL_DESCRIPTORS: Record<BarrelStyle, PartDescriptor<BarrelStyle>> = {
@@ -65,6 +91,9 @@ export const BARREL_DESCRIPTORS: Record<BarrelStyle, PartDescriptor<BarrelStyle>
   long:     { id: "long",     label: "Long",     blurb: "Extended-length barrel. More reach." },
   sniper:   { id: "sniper",   label: "Sniper",   blurb: "Extra-long, pencil-thin precision tube." },
   stubby:   { id: "stubby",   label: "Stubby",   blurb: "Short, wide howitzer-grade launcher." },
+  mortar:   { id: "mortar",   label: "Mortar",   blurb: "Very short, very wide bore. Indirect feel." },
+  twin:     { id: "twin",     label: "Twin",     blurb: "Side-by-side dual barrels." },
+  rail:     { id: "rail",     label: "Rail",     blurb: "Hyper-long, hyper-thin rail accelerator." },
 };
 
 export const PATTERN_DESCRIPTORS: Record<PatternStyle, PartDescriptor<PatternStyle>> = {
@@ -73,6 +102,9 @@ export const PATTERN_DESCRIPTORS: Record<PatternStyle, PartDescriptor<PatternSty
   tiger:    { id: "tiger",    label: "Tiger",    blurb: "Vertical tiger stripe camo." },
   digital:  { id: "digital",  label: "Digital",  blurb: "Pixelated urban pattern." },
   chevron:  { id: "chevron",  label: "Chevron",  blurb: "Forward-pointing chevrons." },
+  splinter: { id: "splinter", label: "Splinter", blurb: "Angular shards — German splinter camo." },
+  urban:    { id: "urban",    label: "Urban",    blurb: "Rectangular block camo for city fighting." },
+  hex:      { id: "hex",      label: "Hex",      blurb: "Hexagonal tiled cells, modern kit." },
 };
 
 export const DECAL_DESCRIPTORS: Record<DecalStyle, PartDescriptor<DecalStyle>> = {
@@ -81,6 +113,9 @@ export const DECAL_DESCRIPTORS: Record<DecalStyle, PartDescriptor<DecalStyle>> =
   star:      { id: "star",      label: "Star",      blurb: "Allied white star." },
   skull:     { id: "skull",     label: "Skull",     blurb: "Jolly roger. Intimidation factor." },
   crosshair: { id: "crosshair", label: "Reticle",   blurb: "Tactical reticle stencil." },
+  cross:     { id: "cross",     label: "Cross",     blurb: "Catholic cross. Pro patria et fide." },
+  flame:     { id: "flame",     label: "Flame",     blurb: "Stylised flame silhouette." },
+  shield:    { id: "shield",    label: "Shield",    blurb: "Heraldic shield outline." },
 };
 
 export const PALETTE_PRIMARY: number[] = [

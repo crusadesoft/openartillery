@@ -77,37 +77,87 @@ export class Terrain {
   }
 
   explode(ex: number, ey: number, radius: number): void {
-    const r2 = radius * radius;
-    const xStart = Math.max(0, Math.floor(ex - radius));
-    const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius));
+    // Carve a smooth parabolic bowl instead of subtracting a raw sphere
+    // — the raw-sphere approach left vertical ledges where the crater
+    // boundary met the unaffected terrain. With a bowl, adjacent
+    // columns change in gradually-decreasing amounts toward the rim.
+    const xStart = Math.max(0, Math.floor(ex - radius - 2));
+    const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius + 2));
     for (let x = xStart; x <= xEnd; x++) {
-      const dx = x - ex;
-      const dy = Math.sqrt(Math.max(0, r2 - dx * dx));
-      const top = ey - dy;
-      const bot = ey + dy;
+      const dx = (x - ex) / radius;
+      if (dx * dx >= 1) continue;
+      // Smooth parabolic bowl: depth = radius at centre, 0 at rim.
+      const depth = radius * (1 - dx * dx);
+      const craterSurfaceY = ey + depth;
       const h = this.heights[x]!;
-      if (top <= h && bot > h) {
-        const nh = Math.min(WORLD.HEIGHT - 1, bot);
-        if (nh !== h) this.setHeight(x, nh);
+      if (craterSurfaceY > h) {
+        this.setHeight(x, Math.min(WORLD.HEIGHT - 1, craterSurfaceY));
       }
     }
+    // Slump pass — two iterations of a light binomial blur over the
+    // crater neighbourhood (plus a short spillover). Smooths the rim
+    // cliff without erasing the crater's concavity.
+    smoothBand(
+      this.heights,
+      this.state.heights,
+      Math.max(1, Math.floor(ex - radius - 6)),
+      Math.min(this.width - 2, Math.ceil(ex + radius + 6)),
+      2,
+    );
   }
 
   mound(ex: number, ey: number, radius: number): void {
-    const r2 = radius * radius;
-    const xStart = Math.max(0, Math.floor(ex - radius));
-    const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius));
+    // Dome-shaped addition using the same parabolic profile — builds
+    // terrain instead of removing it, with soft shoulders rather than
+    // a clipped sphere top.
+    const xStart = Math.max(0, Math.floor(ex - radius - 2));
+    const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius + 2));
     for (let x = xStart; x <= xEnd; x++) {
-      const dx = x - ex;
-      const dy = Math.sqrt(Math.max(0, r2 - dx * dx));
-      const top = ey - dy;
+      const dx = (x - ex) / radius;
+      if (dx * dx >= 1) continue;
+      const lift = radius * (1 - dx * dx);
+      const domeTop = ey - lift;
       const h = this.heights[x]!;
-      if (top < h) this.setHeight(x, Math.max(40, top));
+      if (domeTop < h) this.setHeight(x, Math.max(40, domeTop));
     }
+    smoothBand(
+      this.heights,
+      this.state.heights,
+      Math.max(1, Math.floor(ex - radius - 6)),
+      Math.min(this.width - 2, Math.ceil(ex + radius + 6)),
+      2,
+    );
   }
 
   private setHeight(x: number, y: number): void {
     this.heights[x] = y;
     this.state.heights[x] = y;
+  }
+}
+
+/** Binomial-weighted [1, 2, 1] / 4 low-pass filter applied to a band of
+ *  columns. Run for `passes` iterations. Mutates both the local heights
+ *  array and the synced state array so the client sees the smoothed
+ *  result immediately. Preserves wide features (craters, hills) while
+ *  melting sharp rim cliffs between adjacent columns. */
+function smoothBand(
+  heights: number[],
+  state: { [i: number]: number },
+  lo: number,
+  hi: number,
+  passes: number,
+): void {
+  const n = heights.length;
+  for (let p = 0; p < passes; p++) {
+    const buf = heights.slice(Math.max(0, lo - 1), Math.min(n, hi + 2));
+    const bufOff = Math.max(0, lo - 1);
+    for (let x = lo; x <= hi; x++) {
+      const l = buf[x - 1 - bufOff] ?? heights[x - 1]!;
+      const m = buf[x - bufOff]     ?? heights[x]!;
+      const r = buf[x + 1 - bufOff] ?? heights[x + 1]!;
+      const avg = (l + m * 2 + r) * 0.25;
+      heights[x] = avg;
+      state[x] = avg;
+    }
   }
 }

@@ -20,6 +20,7 @@ export function FireButton({ room, power, isMyTurn, hasFlight }: Props): JSX.Ele
     0,
     Math.min(1, (power - TANK.MIN_POWER) / (TANK.MAX_POWER - TANK.MIN_POWER)),
   );
+  const tier = t > 0.9 ? "hot" : t > 0.6 ? "warm" : "cool";
 
   return (
     <button
@@ -27,21 +28,45 @@ export function FireButton({ room, power, isMyTurn, hasFlight }: Props): JSX.Ele
       className={`fire-btn ${ready ? "ready" : ""}`}
       disabled={!ready}
       onClick={() => ready && room.send("fire", {})}
-      title="SPACE or ENTER"
+      title="SPACE or ENTER to fire"
+      aria-label="Fire"
     >
-      <span className="glyph">▲</span>
-      <span className="label">FIRE</span>
-      <span className="power-bar">
-        <span
-          className="fill"
-          style={{
-            width: `${t * 100}%`,
-            background:
-              t > 0.9 ? "var(--danger)" : t > 0.6 ? "var(--warn)" : "var(--accent)",
-          }}
-        />
+      <span className="fire-btn-housing">
+        <span className="fire-btn-rivet r-tl" />
+        <span className="fire-btn-rivet r-tr" />
+        <span className="fire-btn-rivet r-bl" />
+        <span className="fire-btn-rivet r-br" />
+        <span className="fire-btn-dome">
+          <svg
+            className="fire-btn-reticle"
+            viewBox="0 0 40 40"
+            aria-hidden
+          >
+            <circle cx="20" cy="20" r="16" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.7"/>
+            <circle cx="20" cy="20" r="10" fill="none" stroke="currentColor" strokeWidth="1.2" opacity="0.5"/>
+            <line x1="20" y1="2"  x2="20" y2="10" stroke="currentColor" strokeWidth="1.6"/>
+            <line x1="20" y1="30" x2="20" y2="38" stroke="currentColor" strokeWidth="1.6"/>
+            <line x1="2"  y1="20" x2="10" y2="20" stroke="currentColor" strokeWidth="1.6"/>
+            <line x1="30" y1="20" x2="38" y2="20" stroke="currentColor" strokeWidth="1.6"/>
+            <circle cx="20" cy="20" r="2" fill="currentColor"/>
+          </svg>
+          <span className="fire-btn-label">FIRE</span>
+        </span>
       </span>
-      <span className="kb">SPACE</span>
+      <span className={`fire-btn-gauge tier-${tier}`}>
+        <span className="fire-btn-gauge-track">
+          <span
+            className="fire-btn-gauge-fill"
+            style={{ width: `${t * 100}%` }}
+          />
+          <span className="fire-btn-gauge-tick t-25" />
+          <span className="fire-btn-gauge-tick t-50" />
+          <span className="fire-btn-gauge-tick t-75" />
+        </span>
+        <span className="fire-btn-gauge-lbl">
+          {Math.round(t * 100)}% <span className="fire-btn-gauge-hint">· SPACE</span>
+        </span>
+      </span>
     </button>
   );
 }

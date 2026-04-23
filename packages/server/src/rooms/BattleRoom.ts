@@ -52,6 +52,60 @@ const BOT_NAMES = [
   "Muse",
 ];
 
+/** Bot trash-talk. `$0` is replaced with the first positional argument
+ *  (killer/victim name) when present. */
+const BOT_LINES = {
+  on_fire: [
+    "Eat this.",
+    "Range me on three.",
+    "Adjusting — dead wrong, dead man.",
+    "Wind's with me.",
+    "Sending mail.",
+    "Round out.",
+    "Hope you packed a helmet.",
+    "This one's got your name on it.",
+    "Steady… and release.",
+    "Light 'em up.",
+  ],
+  on_kill: [
+    "Scratch one, $0.",
+    "Don't blink next time, $0.",
+    "Was that it?",
+    "Tag them and bag them.",
+    "Nap time, $0.",
+    "You fire that thing backwards?",
+    "Rookie numbers.",
+    "Go cry about it.",
+    "Thanks for the kill streak.",
+    "GG ez.",
+  ],
+  on_death: [
+    "Lucky shot, $0.",
+    "I'll be back. With interest.",
+    "Nice one. For a cheater.",
+    "Reviewing the tape.",
+    "You'll pay for that.",
+    "Cheese strats.",
+    "Mark that down — won't happen twice.",
+    "Tell my hull I loved her.",
+  ],
+  on_hit: [
+    "Barely felt it.",
+    "Is that the best you got?",
+    "Closer. Try again.",
+    "Keep firing, champ.",
+    "Scratched the paint.",
+    "My gunner's laughing.",
+  ],
+} as const;
+
+function pick(lines: readonly string[], args: string[] = []): string {
+  const line = lines[Math.floor(Math.random() * lines.length)]!;
+  return args.length > 0
+    ? line.replace(/\$(\d)/g, (_, i) => args[Number(i)] ?? "")
+    : line;
+}
+
 interface SessionMeta {
   input: PlayerInput;
   messages: number[];
@@ -104,8 +158,20 @@ export class BattleRoom extends Room<BattleState> {
     this.state.phase = "waiting";
 
     if (options.createPrivate || mode === "private") {
-      this.state.inviteCode = generateInviteCode();
-      this.setPrivate(true);
+      // Accept the client-generated invite code so the matchmaker's
+      // `filterBy(["mode","inviteCode"])` indexes this room by the
+      // exact code a guest will pass on join. Fall back to a server-
+      // generated code if the client didn't supply one.
+      const incoming = typeof options.inviteCode === "string"
+        ? options.inviteCode.trim().toUpperCase()
+        : "";
+      this.state.inviteCode = /^[A-Z0-9]{4,10}$/.test(incoming)
+        ? incoming
+        : generateInviteCode();
+      // Don't call `setPrivate(true)` — that would hide the room from
+      // the matchmaker that `join("battle", { mode, inviteCode })`
+      // uses to locate it. `filterBy` already means only a client with
+      // the exact code can match.
     }
     this.setMetadata({
       mode,
@@ -476,6 +542,12 @@ export class BattleRoom extends Room<BattleState> {
       power: shot.power,
       from: shot.from,
     });
+    // Bot shot-taunt — fires before the round lands so it reads as
+    // confident swagger. Gated to a subset of shots so the feed stays
+    // lively, not spammy.
+    if (p.bot && Math.random() < 0.22) {
+      this.botSay(p, pick(BOT_LINES.on_fire));
+    }
     this.logEvent({
       kind: "fire",
       id: p.id,
@@ -751,6 +823,22 @@ export class BattleRoom extends Room<BattleState> {
           victimName: victim?.name ?? "Unknown",
           weapon: d.weapon,
         });
+        // Bot trash-talk — cocky one-liner from the killer, parting
+        // shot from the victim. Small random chance so the feed doesn't
+        // get spammy when bots stack kills.
+        if (killer?.bot && killer.id !== victim?.id && Math.random() < 0.7) {
+          this.botSay(killer, pick(BOT_LINES.on_kill, [victim?.name ?? "you"]));
+        }
+        if (victim?.bot && Math.random() < 0.55) {
+          this.botSay(victim, pick(BOT_LINES.on_death, [killer?.name ?? "???"]));
+        }
+      } else {
+        // Hit but didn't kill — occasional bot reaction (being hit
+        // is more common than dying, throttle harder).
+        const victim = this.state.players.get(d.tankId);
+        if (victim?.bot && Math.random() < 0.18) {
+          this.botSay(victim, pick(BOT_LINES.on_hit));
+        }
       }
     }
     for (const id of telemetry.deaths) {
@@ -895,6 +983,18 @@ export class BattleRoom extends Room<BattleState> {
 
   private broadcastEvent(evt: Record<string, unknown>): void {
     this.broadcast("event", evt);
+  }
+
+  /** Bots occasionally mouth off in the chat feed — wired into kill,
+   *  death, hit, and fire events. Throttled by the calling site's
+   *  Math.random gate so the feed stays readable. */
+  private botSay(bot: Player, text: string): void {
+    this.broadcastEvent({
+      type: "chat",
+      name: bot.name,
+      text,
+      at: Date.now(),
+    });
   }
 }
 

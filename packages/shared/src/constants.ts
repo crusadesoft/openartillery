@@ -25,7 +25,7 @@ export const TURN = {
 export const TANK = {
   WIDTH: 36,
   HEIGHT: 18,
-  MAX_HP: 100,
+  MAX_HP: 300,
   /** Fallback barrel length when a specific style isn't known.
    *  Derived from `tankPreview.barrelLenMap.standard * 48 = 22.08`. */
   BARREL_LENGTH: 22,
@@ -44,6 +44,9 @@ export const TANK = {
     long: 28,
     sniper: 32,
     stubby: 15,
+    mortar: 11,
+    twin: 24,
+    rail: 35,
   } as Record<string, number>,
   MIN_ANGLE_DEG: -90,
   MAX_ANGLE_DEG: 90,

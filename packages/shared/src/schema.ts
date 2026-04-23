@@ -12,7 +12,7 @@ export class Player extends Schema {
   @type("number") x = 0;
   @type("number") y = 0;
   @type("number") angle = 0;
-  @type("number") hp = 100;
+  @type("number") hp = 300;
   @type("number") fuel = 100;
   @type("number") power = 0;
   @type("boolean") charging = false;
@@ -86,6 +86,6 @@ export class BattleState extends Schema {
   // Host-tweakable match settings applied when the match starts.
   @type("number") turnDurationSec = 30;
   @type("number") fuelPerTurn = 100;
-  @type("number") startingHp = 100;
+  @type("number") startingHp = 300;
   @type("number") windMax = 25;
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../auth/authClient";
 import type { LeaderboardEntry } from "@artillery/shared";
 import type { Route } from "../router";
@@ -51,9 +51,18 @@ function rankFor(mmr: number) {
 // Leaderboard-level deterministic pseudo-loadout generator so every operator
 // reads as a distinct silhouette even if the server doesn't persist the
 // authed user's saved loadout yet. Keeps the visuals varied + inviting.
-const BODIES = ["heavy", "light", "assault"] as const;
-const TURRETS = ["standard", "angular", "low"] as const;
-const BARRELS = ["standard", "heavy", "long"] as const;
+const BODIES = [
+  "heavy", "light", "assault", "scout", "siege",
+  "bunker", "recon", "speeder",
+] as const;
+const TURRETS = [
+  "standard", "angular", "low", "wedge", "dome",
+  "box", "tall", "twin",
+] as const;
+const BARRELS = [
+  "standard", "heavy", "long", "sniper", "stubby",
+  "mortar", "twin", "rail",
+] as const;
 const FIELD_COLORS = [
   0x3a2e1b, 0x4a3d28, 0x2e3a22, 0x1f2b1a, 0x2c2823,
   0x5a2a1e, 0x38363a, 0x6b3d1a, 0x1a2430, 0x211515,
@@ -71,8 +80,14 @@ function hash(s: string): number {
   return Math.abs(h);
 }
 
-const PATTERNS = ["solid", "stripes", "tiger", "digital", "chevron"] as const;
-const DECALS = ["none", "number", "star", "skull", "crosshair"] as const;
+const PATTERNS = [
+  "solid", "stripes", "tiger", "digital", "chevron",
+  "splinter", "urban", "hex",
+] as const;
+const DECALS = [
+  "none", "number", "star", "skull", "crosshair",
+  "cross", "flame", "shield",
+] as const;
 const PATTERN_COLORS = [0x1a140c, 0x0a0a10, 0x3a2a18, 0x1f1a12];
 
 function vehicleFor(username: string): EntryDisplay["vehicle"] {
@@ -277,10 +292,9 @@ function TankPlate({
   );
 }
 
-import { useEffect as useLayoutEffect, useRef } from "react";
 function useRefCanvas(w: number, h: number, v: EntryDisplay["vehicle"]) {
   const ref = useRef<HTMLCanvasElement>(null);
-  useLayoutEffect(() => {
+  useEffect(() => {
     const c = ref.current;
     if (!c) return;
     // High-DPI sharpness — size the canvas buffer at DPR, then scale the

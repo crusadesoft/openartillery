@@ -188,6 +188,7 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
     let mounds: Mound[] = [];
     let cycleMs = 0;
     let resetAt = 0;
+    let barrelAngle = -Math.PI / 4;  // updated to match initial shot direction
     const CYCLE_LEN = 4400;
 
     // Helpers —————————————————————————————————————————————————————
@@ -372,6 +373,10 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       const effDy = groundY - muzzleY;
       const vx = effDx / flightSec;
       const vy = (effDy - 0.5 * G_PREVIEW * flightSec * flightSec) / flightSec;
+      // Point the mini tank's barrel in the exact direction the round
+      // leaves the muzzle. atan2(vy, vx) is already in canvas-y-down
+      // coords so it matches how Phaser / canvas rotation reads.
+      barrelAngle = Math.atan2(vy, vx);
       projectiles.push({
         x: muzzleX,
         y: muzzleY,
@@ -503,7 +508,7 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.stroke();
 
       // Tank silhouette.
-      drawMiniTank(ctx, tankX, tankY);
+      drawMiniTank(ctx, tankX, tankY, barrelAngle);
       // Target marker.
       ctx.fillStyle = "rgba(255, 180, 80, 0.7)";
       ctx.fillRect(targetX - 10, groundY - 1, 20, 2);
@@ -739,10 +744,12 @@ function drawProjectileShape(
 
 /** Canonical tank silhouette — same renderer Customize uses so the
  *  Arsenal, leaderboard, and profile screens all stay visually aligned. */
-function drawMiniTank(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  // Target footprint: ~64 px wide, centred on (x, y) with the track
-  // resting on (x, y). The preview renderer needs a top-left anchor and
-  // body width; treads sit at y0 + hullH within its own coord system.
+function drawMiniTank(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  barrelAngle = -Math.PI / 4,
+): void {
   const W = 66;
   const hullFrac = 0.34; // heavy
   const treadFrac = 0.13;
@@ -762,6 +769,7 @@ function drawMiniTank(ctx: CanvasRenderingContext2D, x: number, y: number): void
     pattern: DEFAULT_LOADOUT_SPEC.pattern,
     patternColor: "#" + DEFAULT_LOADOUT_SPEC.patternColor.toString(16).padStart(6, "0"),
     decal: DEFAULT_LOADOUT_SPEC.decal,
+    barrelAngleRad: barrelAngle,
   });
 }
 

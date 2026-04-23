@@ -22,6 +22,19 @@ export function getClient(): Client {
 
 const RECONNECTION_KEY = "artillery:reconnection";
 
+/** 6-char alphanumeric invite code, avoiding visually-confusing chars
+ *  like `0/O` and `1/I`. Mirrors the server's generator; generated
+ *  client-side so the matchmaker's `filterBy(["mode","inviteCode"])`
+ *  can match a guest's join to the host's room on create. */
+function randomInviteCode(): string {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) {
+    code += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return code;
+}
+
 export async function joinBattle(opts: {
   mode: string;
   username: string;
@@ -57,24 +70,36 @@ export async function joinBattle(opts: {
 
   let room: Room<BattleState>;
   if (opts.inviteCode) {
-    const list = await (
-      c as unknown as {
-        getAvailableRooms: (
-          name: string,
-        ) => Promise<Array<{ roomId: string; metadata?: { inviteCode?: string } }>>;
-      }
-    ).getAvailableRooms("battle");
-    const target = list.find((r) => r.metadata?.inviteCode === opts.inviteCode);
-    if (target) {
-      room = await c.joinById<BattleState>(target.roomId, joinOptions);
-    } else {
-      room = await c.create<BattleState>("battle", {
+    // Colyseus matchmaker filters rooms by `mode` + `inviteCode`
+    // (see server/src/index.ts `filterBy(["mode","inviteCode"])`), so
+    // `join` will locate the host's existing private room. If no room
+    // matches we throw a clearer error than the server's default so
+    // the UI can show "Invalid invite code" instead of a raw matchmake
+    // message.
+    try {
+      room = await c.join<BattleState>("battle", {
         ...joinOptions,
         mode: "private",
       });
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? String(err);
+      if (/no rooms/i.test(msg) || /matchmake/i.test(msg)) {
+        throw new Error(`No match found for invite code "${opts.inviteCode}"`);
+      }
+      throw err;
     }
-  } else if (opts.mode === "bots" || opts.mode === "private") {
-    // Always create a fresh room for these — no matchmaking join.
+  } else if (opts.mode === "private") {
+    // Generate the invite code client-side and pass it through `create`
+    // options so the matchmaker's `filterBy(["mode","inviteCode"])`
+    // indexes this room by that exact code. Without this, filterBy
+    // sees `inviteCode: undefined` and no guest can ever find us.
+    const generatedCode = randomInviteCode();
+    room = await c.create<BattleState>("battle", {
+      ...joinOptions,
+      inviteCode: generatedCode,
+    });
+  } else if (opts.mode === "bots") {
+    // Always a fresh room — no matchmaking join.
     room = await c.create<BattleState>("battle", joinOptions);
   } else {
     room = await c.joinOrCreate<BattleState>("battle", joinOptions);

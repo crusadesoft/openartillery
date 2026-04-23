@@ -130,7 +130,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
           startsInMs={Math.max(0, room.state.roundStartsAt - Date.now())}
           turnDurationSec={room.state.turnDurationSec || 30}
           fuelPerTurn={room.state.fuelPerTurn || 100}
-          startingHp={room.state.startingHp || 100}
+          startingHp={room.state.startingHp || 300}
           windMax={room.state.windMax || 25}
           onReadyToggle={toggleReady}
           onAddBot={addBot}

@@ -39,6 +39,11 @@ export class ProjectileView {
     this.sprite = scene.add
       .image(state.x, state.y, art.tex)
       .setDisplaySize(art.w, art.h)
+      // Anchor near the trailing edge so the projectile reads as
+      // "emerging from the muzzle" instead of being half-swallowed by
+      // the barrel at spawn. 0.25 keeps a little overlap so in-flight
+      // the shell's centre of mass is still near its physics position.
+      .setOrigin(0.25, 0.5)
       .setDepth(6);
     this.lx = state.x;
     this.ly = state.y;

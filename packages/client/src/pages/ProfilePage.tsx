@@ -221,9 +221,18 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
 // Deterministic pseudo-loadout derived from a username — same technique
 // the leaderboard uses so every operator has a distinct silhouette even
 // when the server doesn't persist public loadouts yet.
-const OP_BODIES = ["heavy", "light", "assault"] as const;
-const OP_TURRETS = ["standard", "angular", "low"] as const;
-const OP_BARRELS = ["standard", "heavy", "long"] as const;
+const OP_BODIES = [
+  "heavy", "light", "assault", "scout", "siege",
+  "bunker", "recon", "speeder",
+] as const;
+const OP_TURRETS = [
+  "standard", "angular", "low", "wedge", "dome",
+  "box", "tall", "twin",
+] as const;
+const OP_BARRELS = [
+  "standard", "heavy", "long", "sniper", "stubby",
+  "mortar", "twin", "rail",
+] as const;
 const OP_FIELD_COLORS = [
   0x3a2e1b, 0x4a3d28, 0x2e3a22, 0x1f2b1a, 0x2c2823,
   0x5a2a1e, 0x38363a, 0x6b3d1a, 0x1a2430, 0x211515,
@@ -263,8 +272,14 @@ function opHash(s: string): number {
   return Math.abs(h);
 }
 
-const OP_PATTERNS = ["solid", "stripes", "tiger", "digital", "chevron"] as const;
-const OP_DECALS = ["none", "number", "star", "skull", "crosshair"] as const;
+const OP_PATTERNS = [
+  "solid", "stripes", "tiger", "digital", "chevron",
+  "splinter", "urban", "hex",
+] as const;
+const OP_DECALS = [
+  "none", "number", "star", "skull", "crosshair",
+  "cross", "flame", "shield",
+] as const;
 const OP_PATTERN_COLORS = [0x1a140c, 0x0a0a10, 0x3a2a18, 0x1f1a12];
 
 function loadoutFromUsername(username: string): ReturnType<typeof loadLoadout> {
