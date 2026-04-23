@@ -48,9 +48,7 @@ services:
       LOG_LEVEL: info
     ports:
       - "2567:2567"
-    deploy:
-      replicas: 2
-      restart_policy: { condition: on-failure }
+    restart: unless-stopped
 
 volumes:
   pgdata:
