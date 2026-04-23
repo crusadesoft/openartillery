@@ -282,7 +282,6 @@ export class BattleScene extends Phaser.Scene {
       arctic:     { sun: 0xeadffa, haze: 0xd4e1ef, cloud: 0xc4d6ea },
       lava:       { sun: 0xff7030, haze: 0xa03020, cloud: 0x702820 },
       dusk:       { sun: 0xffb570, haze: 0xc06a80, cloud: 0xff9a70 },
-      rock:       { sun: 0xd0c8b0, haze: 0xa89878, cloud: 0xc4b898 },
     };
     const pal = palettes[biome] ?? palettes.grasslands;
     const skyH = WORLD.HEIGHT * 0.62;

@@ -358,11 +358,11 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         // verticals on detonation — we simulate the primary arc too.
       }
       const flightSec =
-        weapon === "sniper" ? 0.95 :
-        weapon === "stubby" ? 1.6 :
         weapon === "heavy" || weapon === "airstrike" ? 1.45 :
         weapon === "mirv" ? 1.3 :
         weapon === "grenade" || weapon === "skipper" ? 1.15 :
+        weapon === "dirt" ? 1.35 :
+        weapon === "napalm" ? 1.3 :
         1.2;
       const dx = targetX - muzzleX;
       // For bouncers, aim a bit short so the bounces carry it the rest.
