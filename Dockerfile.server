@@ -24,15 +24,12 @@ FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
 WORKDIR /app
 
-# npm workspaces hoist everything into the root /app/node_modules, so
-# there's no per-package node_modules to copy — only dist + package.json.
-COPY --from=builder /app/package.json ./
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app/packages/shared/package.json packages/shared/
-COPY --from=builder /app/packages/shared/dist packages/shared/dist
-COPY --from=builder /app/packages/server/package.json packages/server/
-COPY --from=builder /app/packages/server/dist packages/server/dist
-COPY --from=builder /app/packages/client/dist packages/client/dist
+# Copy the whole built tree. npm workspaces can place some deps in
+# per-package node_modules (e.g. when hoisting conflicts), so rather
+# than enumerate every path that might or might not exist, we copy the
+# builder's /app verbatim. Source files ride along — negligible size
+# next to node_modules and no PII.
+COPY --from=builder /app ./
 
 EXPOSE 2567
 HEALTHCHECK --interval=15s --timeout=3s --retries=5 \
