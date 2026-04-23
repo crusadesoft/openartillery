@@ -1,0 +1,13 @@
+node_modules/
+dist/
+build/
+.vite/
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+coverage/
+packages/*/dist/
+packages/*/tsconfig.tsbuildinfo
+.playwright-cli/

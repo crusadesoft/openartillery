@@ -1,0 +1,50 @@
+{
+  "name": "artillery",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Browser-based turn-based multiplayer artillery game (UMAG-inspired).",
+  "workspaces": [
+    "packages/shared",
+    "packages/server",
+    "packages/client"
+  ],
+  "scripts": {
+    "build": "npm run build:shared && npm run build --workspaces --if-present",
+    "build:shared": "npm run build -w @artillery/shared",
+    "dev": "npm-run-all -p dev:shared dev:server dev:client",
+    "dev:shared": "npm run dev -w @artillery/shared",
+    "dev:server": "npm run dev -w @artillery/server",
+    "dev:client": "npm run dev -w @artillery/client",
+    "start": "npm run start -w @artillery/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "eslint \"packages/*/src/**/*.{ts,tsx}\" --max-warnings=0",
+    "format": "prettier --write \"packages/*/src/**/*.{ts,tsx,css}\"",
+    "format:check": "prettier --check \"packages/*/src/**/*.{ts,tsx,css}\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:generate": "drizzle-kit generate --config packages/server/drizzle.config.ts",
+    "db:migrate": "npm run build:shared && node --loader tsx packages/server/src/db/migrate.ts",
+    "db:studio": "drizzle-kit studio --config packages/server/drizzle.config.ts",
+    "docker:up": "docker compose up -d postgres redis",
+    "docker:down": "docker compose down",
+    "clean": "rimraf packages/*/dist packages/*/tsconfig.tsbuildinfo node_modules/.cache"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^7.16.0",
+    "@typescript-eslint/parser": "^7.16.0",
+    "@vitest/coverage-v8": "^1.6.0",
+    "drizzle-kit": "^0.24.0",
+    "eslint": "^8.57.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-react-hooks": "^4.6.2",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.3.2",
+    "rimraf": "^5.0.5",
+    "tsx": "^4.7.1",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

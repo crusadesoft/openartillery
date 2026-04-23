@@ -1,0 +1,951 @@
+import { Client, Room } from "@colyseus/core";
+import { randomBytes } from "crypto";
+import {
+  BattleState,
+  BIOMES,
+  type BiomeId,
+  BOT_DIFFICULTY_SPECS,
+  type BotDifficulty,
+  CHAT_RATE_LIMIT,
+  ClientMessageSchema,
+  DEFAULT_LOADOUT,
+  DEFAULT_MMR,
+  MESSAGE_RATE_LIMIT,
+  MODES,
+  NETWORK,
+  Player,
+  RECONNECT_GRACE_MS,
+  ROOM_OPTIONS_KEYS,
+  type GameMode,
+  type RoomJoinOptions,
+  TANK,
+  TURN,
+  WORLD,
+  WEAPONS,
+  type WeaponId,
+  randomBiome,
+  sanitizeLoadout,
+} from "@artillery/shared";
+import { World, type Input as PlayerInput } from "../physics/World.js";
+import { BotBrain } from "./Bot.js";
+import { logger } from "../logger.js";
+import { matchesFinished, matchesStarted } from "../metrics.js";
+import { persistMatch } from "../match/persist.js";
+import { verifyAccessToken } from "../auth/jwt.js";
+import { db, schema } from "../db/index.js";
+import { eq } from "drizzle-orm";
+
+const TANK_COLORS = [
+  0xff5e5e, 0x5ecfff, 0x8aff5e, 0xffd25e, 0xcf5eff, 0xff9d5e,
+];
+
+const BOT_NAMES = [
+  "Targa",
+  "Rico",
+  "Vesper",
+  "Nimbus",
+  "Halcyon",
+  "Onyx",
+  "Zenith",
+  "Archer",
+  "Brisk",
+  "Muse",
+];
+
+interface SessionMeta {
+  input: PlayerInput;
+  messages: number[];
+  chats: number[];
+  bot?: BotBrain;
+}
+
+interface RoomOptions extends RoomJoinOptions {
+  createPrivate?: boolean;
+}
+
+export class BattleRoom extends Room<BattleState> {
+  override maxClients = 6;
+
+  private mode: GameMode = "ffa";
+  private world!: World;
+  private sessions = new Map<string, SessionMeta>();
+  private turnOrder: string[] = [];
+  private turnIndex = 0;
+  private nextTurnAt = 0;
+  private simInterval?: NodeJS.Timeout;
+  private readonly dt = 1 / NETWORK.TICK_HZ;
+  private matchStartedAtMs = 0;
+  private eventLog: Array<Record<string, unknown>> = [];
+  private persisted = false;
+  private rematchVotes = new Set<string>();
+  /** true once the current turn's tank has fired — blocks spam. */
+  private turnFired = false;
+  private initialOptions: RoomOptions = { mode: "ffa", username: "Player" };
+
+  override async onCreate(options: RoomOptions = { mode: "ffa", username: "Player" }) {
+    this.initialOptions = options;
+    const mode = (options.mode as GameMode) in MODES ? (options.mode as GameMode) : "ffa";
+    this.mode = mode;
+    const spec = MODES[mode];
+    this.maxClients = spec.maxPlayers;
+
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    const biome: BiomeId =
+      (options.biome && options.biome in BIOMES
+        ? (options.biome as BiomeId)
+        : randomBiome());
+
+    this.setState(new BattleState());
+    this.setPatchRate(1000 / NETWORK.PATCH_HZ);
+    this.world = new World(this.state, seed, biome);
+    this.state.mode = mode;
+    this.state.biome = biome;
+    this.state.wind = rollWind();
+    this.state.phase = "waiting";
+
+    if (options.createPrivate || mode === "private") {
+      this.state.inviteCode = generateInviteCode();
+      this.setPrivate(true);
+    }
+    this.setMetadata({
+      mode,
+      ranked: spec.ranked,
+      biome,
+      inviteCode: this.state.inviteCode || undefined,
+    });
+
+    // Preload bots for "bots" mode.
+    if (mode === "bots") {
+      const count = clamp(
+        Number(options.botCount ?? spec.preloadedBots ?? 2),
+        1,
+        spec.maxPlayers - 1,
+      );
+      const diff = (options.botDifficulty ?? "normal") as BotDifficulty;
+      for (let i = 0; i < count; i++) {
+        this.addBot(diff);
+      }
+    }
+
+    this.onMessage("*", (client, kind, payload) =>
+      this.handleMessage(client, kind, payload),
+    );
+
+    this.simInterval = setInterval(() => this.tick(), 1000 / NETWORK.TICK_HZ);
+    this.simInterval.unref?.();
+
+    logger.info(
+      { mode, seed, biome, inviteCode: this.state.inviteCode || null },
+      "room created",
+    );
+  }
+
+  override onDispose(): void {
+    if (this.simInterval) clearInterval(this.simInterval);
+  }
+
+  override async onAuth(_client: Client, options: RoomOptions): Promise<boolean> {
+    if (this.mode === "private" && options.inviteCode) {
+      if (options.inviteCode !== this.state.inviteCode) {
+        throw new Error("invalid invite code");
+      }
+    }
+    return true;
+  }
+
+  override async onJoin(client: Client, options: RoomOptions): Promise<void> {
+    const accountInfo = await resolveIdentity(options);
+    const username =
+      accountInfo?.username ||
+      (options.username ?? "").trim().slice(0, 16) ||
+      `Tank${this.state.players.size + 1}`;
+
+    const p = new Player();
+    p.id = client.sessionId;
+    p.userId = accountInfo?.userId ?? "";
+    p.name = username;
+    p.bot = false;
+    p.mmr = accountInfo?.mmr ?? DEFAULT_MMR;
+    p.hp = this.state.startingHp > 0 ? this.state.startingHp : TANK.MAX_HP;
+    p.fuel = this.state.fuelPerTurn >= 0 ? this.state.fuelPerTurn : TURN.FUEL_PER_TURN;
+    p.weapon = DEFAULT_LOADOUT[0]!;
+    p.color = this.nextTankColor();
+    p.angle = 45;
+    // Apply saved loadout (client sends via join options — also persists
+    // server-side for authed users via /api/me/loadout).
+    const loadout = sanitizeLoadout(
+      ((options as RoomJoinOptions).loadout ?? accountInfo?.loadout) as
+        | Record<string, unknown>
+        | undefined,
+    );
+    p.color = loadout.primaryColor || p.color;
+    p.accentColor = loadout.accentColor;
+    p.bodyStyle = loadout.body;
+    p.turretStyle = loadout.turret;
+    p.barrelStyle = loadout.barrel;
+    p.pattern = loadout.pattern;
+    p.decal = loadout.decal;
+    p.patternColor = loadout.patternColor;
+    this.initAmmo(p);
+    const spawnX = this.pickSpawnX();
+    p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+    this.world.spawnTankAt(p, spawnX);
+    this.state.players.set(client.sessionId, p);
+    this.sessions.set(client.sessionId, {
+      input: { left: false, right: false, up: false, down: false },
+      messages: [],
+      chats: [],
+    });
+
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${p.name} joined`,
+      at: Date.now(),
+    });
+    this.logEvent({ kind: "join", id: p.id, name: p.name, userId: p.userId });
+  }
+
+  override async onLeave(client: Client, consented: boolean): Promise<void> {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    p.connected = false;
+    if (consented || this.state.phase === "ended" || this.state.phase === "waiting") {
+      this.finalizeLeave(client.sessionId);
+      return;
+    }
+    try {
+      await this.allowReconnection(client, RECONNECT_GRACE_MS / 1000);
+      p.connected = true;
+      this.broadcastEvent({
+        type: "chat",
+        name: "server",
+        text: `${p.name} reconnected`,
+        at: Date.now(),
+      });
+    } catch {
+      this.finalizeLeave(client.sessionId);
+    }
+  }
+
+  private finalizeLeave(sessionId: string): void {
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    this.logEvent({ kind: "leave", id: sessionId, name: p.name });
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${p.name} left`,
+      at: Date.now(),
+    });
+    this.state.players.delete(sessionId);
+    this.sessions.delete(sessionId);
+    if (this.state.phase === "playing") {
+      this.turnOrder = this.turnOrder.filter((id) => id !== sessionId);
+      if (this.state.currentTurnId === sessionId) this.advanceTurn();
+      this.checkWin();
+    }
+  }
+
+  private handleMessage(
+    client: Client,
+    kind: string | number,
+    payload: unknown,
+  ): void {
+    const meta = this.sessions.get(client.sessionId);
+    if (!meta) return;
+    if (
+      !rateAllow(
+        meta.messages,
+        MESSAGE_RATE_LIMIT.COUNT,
+        MESSAGE_RATE_LIMIT.WINDOW_MS,
+      )
+    ) {
+      return;
+    }
+    const result = ClientMessageSchema.safeParse({
+      type: kind,
+      ...(payload as object),
+    });
+    if (!result.success) {
+      logger.debug({ kind, err: result.error.issues }, "dropped invalid message");
+      return;
+    }
+    const msg = result.data;
+    switch (msg.type) {
+      case "input":
+        this.handleInput(client, msg);
+        break;
+      case "selectWeapon":
+        this.handleSelectWeapon(client, msg.weapon);
+        break;
+      case "aim":
+        this.handleAim(client, msg.angle, msg.power, msg.facing);
+        break;
+      case "fire":
+        this.handleFireNow(client);
+        break;
+      case "charge":
+        this.handleCharge(client, msg.charging);
+        break;
+      case "ready":
+        this.handleReady(client, msg.ready);
+        break;
+      case "chat":
+        this.handleChat(client, meta, msg.text);
+        break;
+      case "rematch":
+        this.handleRematch(client);
+        break;
+      case "addBot":
+        this.handleAddBot(client, msg.difficulty as BotDifficulty | undefined);
+        break;
+      case "removeBot":
+        this.handleRemoveBot(client, msg.sessionId);
+        break;
+      case "setBotDifficulty":
+        this.handleSetBotDifficulty(
+          client,
+          msg.sessionId,
+          msg.difficulty as BotDifficulty,
+        );
+        break;
+      case "setMatchSettings":
+        this.handleSetMatchSettings(client, msg);
+        break;
+    }
+  }
+
+  private handleSetBotDifficulty(
+    client: Client,
+    sessionId: string,
+    difficulty: BotDifficulty,
+  ): void {
+    if (!(this.mode === "bots" || this.mode === "private")) return;
+    if (this.state.phase !== "waiting") return;
+    const p = this.state.players.get(sessionId);
+    if (!p || !p.bot) return;
+    const spec = BOT_DIFFICULTY_SPECS[difficulty];
+    if (!spec) return;
+    p.difficulty = difficulty;
+    p.mmr = spec.mmr;
+    const meta = this.sessions.get(sessionId);
+    if (meta?.bot) meta.bot.setDifficulty(difficulty);
+    void client;
+  }
+
+  private handleRemoveBot(client: Client, sessionId: string): void {
+    if (!(this.mode === "bots" || this.mode === "private")) return;
+    if (this.state.phase !== "waiting") return;
+    const victim = this.state.players.get(sessionId);
+    if (!victim || !victim.bot) return;
+    this.state.players.delete(sessionId);
+    this.sessions.delete(sessionId);
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${victim.name} removed`,
+      at: Date.now(),
+    });
+    void client;
+  }
+
+  private handleSetMatchSettings(
+    client: Client,
+    msg: {
+      turnDurationSec?: number;
+      fuelPerTurn?: number;
+      startingHp?: number;
+      maxWind?: number;
+    },
+  ): void {
+    if (this.state.phase !== "waiting") return;
+    if (msg.turnDurationSec != null) this.state.turnDurationSec = msg.turnDurationSec;
+    if (msg.fuelPerTurn != null) this.state.fuelPerTurn = msg.fuelPerTurn;
+    if (msg.startingHp != null) {
+      this.state.startingHp = msg.startingHp;
+      this.state.players.forEach((p) => {
+        p.hp = msg.startingHp!;
+      });
+    }
+    if (msg.maxWind != null) {
+      this.state.windMax = msg.maxWind;
+      this.state.wind = Math.max(
+        -msg.maxWind,
+        Math.min(msg.maxWind, this.state.wind),
+      );
+    }
+    void client;
+  }
+
+  private handleAim(
+    client: Client,
+    angle: number,
+    power: number,
+    facing?: -1 | 1,
+  ): void {
+    if (this.state.currentTurnId !== client.sessionId) return;
+    if (this.turnFired) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead) return;
+    p.angle = Math.max(TANK.MIN_ANGLE_DEG, Math.min(TANK.MAX_ANGLE_DEG, angle));
+    p.power = Math.max(0, Math.min(TANK.MAX_POWER, power));
+    if (facing === -1 || facing === 1) p.facing = facing;
+    p.charging = false;
+  }
+
+  private handleFireNow(client: Client): void {
+    if (this.state.currentTurnId !== client.sessionId) return;
+    if (this.turnFired) return;
+    if (this.world.hasLiveProjectiles()) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead) return;
+    if (p.power < TANK.MIN_POWER) return;
+    this.fireCurrent(p);
+  }
+
+  private handleInput(
+    client: Client,
+    msg: { left: boolean; right: boolean; up: boolean; down: boolean },
+  ): void {
+    const meta = this.sessions.get(client.sessionId);
+    if (!meta) return;
+    if (this.state.currentTurnId !== client.sessionId) {
+      meta.input = { left: false, right: false, up: false, down: false };
+      return;
+    }
+    meta.input = { left: msg.left, right: msg.right, up: msg.up, down: msg.down };
+  }
+
+  private handleSelectWeapon(client: Client, weapon: string): void {
+    if (!(weapon in WEAPONS)) return;
+    if (this.state.currentTurnId !== client.sessionId) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || p.charging) return;
+    // Ammo gate: selecting an exhausted weapon is a no-op so the UI
+    // reflects server truth. `undefined` in the map means unlimited.
+    const def = WEAPONS[weapon as WeaponId];
+    if (def.maxAmmo !== undefined) {
+      const remaining = p.ammo.get(weapon);
+      if (remaining !== undefined && remaining <= 0) return;
+    }
+    p.weapon = weapon;
+    this.logEvent({ kind: "weapon", id: p.id, weapon });
+  }
+
+  private handleCharge(client: Client, charging: boolean): void {
+    if (this.state.currentTurnId !== client.sessionId) return;
+    if (this.turnFired) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead) return;
+    if (charging) {
+      if (!p.charging) {
+        p.charging = true;
+        p.power = TANK.MIN_POWER;
+      }
+    } else if (p.charging) {
+      this.fireCurrent(p);
+    }
+  }
+
+  private fireCurrent(p: Player): void {
+    if (this.turnFired) return;
+    // Ammo gate — if the currently selected weapon is exhausted, fall back
+    // to the unlimited default shell so the player's turn doesn't just
+    // soft-lock.
+    const def = WEAPONS[p.weapon as WeaponId];
+    if (def?.maxAmmo !== undefined) {
+      const remaining = p.ammo.get(p.weapon) ?? 0;
+      if (remaining <= 0) {
+        p.weapon = DEFAULT_LOADOUT[0]!;
+      }
+    }
+    const shot = this.world.fire(p);
+    if (!shot) return;
+    const firedDef = WEAPONS[shot.weapon];
+    if (firedDef?.maxAmmo !== undefined) {
+      const remaining = p.ammo.get(shot.weapon) ?? 0;
+      p.ammo.set(shot.weapon, Math.max(0, remaining - 1));
+    }
+    this.turnFired = true;
+    p.shotsFired += 1;
+    this.broadcastEvent({
+      type: "fire",
+      tankId: p.id,
+      weapon: shot.weapon,
+      power: shot.power,
+      from: shot.from,
+    });
+    this.logEvent({
+      kind: "fire",
+      id: p.id,
+      weapon: shot.weapon,
+      power: shot.power,
+      wind: this.state.wind,
+    });
+    this.scheduleEndOfTurn();
+  }
+
+  private handleReady(client: Client, ready: boolean): void {
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    p.ready = ready;
+    if (this.state.phase === "waiting") this.maybeStartCountdown();
+  }
+
+  private handleChat(
+    client: Client,
+    meta: SessionMeta,
+    text: string,
+  ): void {
+    if (!rateAllow(meta.chats, CHAT_RATE_LIMIT.COUNT, CHAT_RATE_LIMIT.WINDOW_MS))
+      return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p) return;
+    this.broadcastEvent({
+      type: "chat",
+      name: p.name,
+      text: text.slice(0, 140),
+      at: Date.now(),
+    });
+  }
+
+  private handleRematch(client: Client): void {
+    if (this.state.phase !== "ended") return;
+    this.rematchVotes.add(client.sessionId);
+    const humans = Array.from(this.state.players.values()).filter(
+      (p) => !p.bot,
+    );
+    if (humans.every((p) => this.rematchVotes.has(p.id))) {
+      this.startRematch();
+    } else {
+      this.broadcastEvent({
+        type: "chat",
+        name: "server",
+        text: `Rematch: ${this.rematchVotes.size}/${humans.length}`,
+        at: Date.now(),
+      });
+    }
+  }
+
+  private handleAddBot(client: Client, difficulty?: BotDifficulty): void {
+    // Only allow adding bots in bots-mode / private rooms while in lobby.
+    if (!(this.mode === "bots" || this.mode === "private")) return;
+    if (this.state.phase !== "waiting") return;
+    if (this.state.players.size >= MODES[this.mode].maxPlayers) return;
+    this.addBot(difficulty ?? "normal");
+    // Host privilege check left permissive for simplicity. Session is validated.
+    void client;
+  }
+
+  private maybeStartCountdown(): void {
+    const players = Array.from(this.state.players.values());
+    const spec = MODES[this.mode];
+    if (players.length < spec.minPlayers) return;
+    const humans = players.filter((p) => !p.bot);
+    if (humans.length === 0) return;
+    if (!humans.every((p) => p.ready)) return;
+    this.state.phase = "countdown";
+    this.state.roundStartsAt = Date.now() + 5_000;
+    setTimeout(() => this.startMatch(), 5_000);
+  }
+
+  shouldFillWithBot(elapsedMs: number): boolean {
+    const spec = MODES[this.mode];
+    if (!spec.botFillAfterMs || spec.botFillAfterMs <= 0) return false;
+    const alive = Array.from(this.state.players.values()).filter(
+      (p) => !p.dead,
+    );
+    return alive.length < spec.minPlayers && elapsedMs > spec.botFillAfterMs;
+  }
+
+  addBot(difficulty: BotDifficulty = "normal"): Player {
+    const spec = BOT_DIFFICULTY_SPECS[difficulty];
+    const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]!;
+    const sessionId = `bot_${randomBytes(4).toString("hex")}`;
+    const p = new Player();
+    p.id = sessionId;
+    p.userId = "";
+    p.name = name;
+    p.bot = true;
+    p.difficulty = difficulty;
+    p.mmr = spec.mmr;
+    p.hp = this.state.startingHp > 0 ? this.state.startingHp : TANK.MAX_HP;
+    p.fuel = this.state.fuelPerTurn >= 0 ? this.state.fuelPerTurn : TURN.FUEL_PER_TURN;
+    p.weapon = DEFAULT_LOADOUT[0]!;
+    p.color = this.nextTankColor();
+    p.angle = 45;
+    p.ready = true;
+    this.initAmmo(p);
+    const spawnX = this.pickSpawnX();
+    p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+    this.world.spawnTankAt(p, spawnX);
+    this.state.players.set(sessionId, p);
+    this.sessions.set(sessionId, {
+      input: { left: false, right: false, up: false, down: false },
+      messages: [],
+      chats: [],
+      bot: new BotBrain(sessionId, this.world, difficulty),
+    });
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${p.name} [${spec.label}] joined`,
+      at: Date.now(),
+    });
+    return p;
+  }
+
+  /** Stock a player's per-weapon ammo for a fresh match. Unlimited
+   *  weapons (no maxAmmo on the def) are intentionally absent from the
+   *  map so the client can read "undefined → unlimited". */
+  private initAmmo(p: Player): void {
+    p.ammo.clear();
+    for (const def of Object.values(WEAPONS)) {
+      if (def.maxAmmo !== undefined) {
+        p.ammo.set(def.id, def.maxAmmo);
+      }
+    }
+  }
+
+  private nextTankColor(): number {
+    const used = new Set<number>();
+    this.state.players.forEach((p) => used.add(p.color));
+    for (const c of TANK_COLORS) if (!used.has(c)) return c;
+    return TANK_COLORS[this.state.players.size % TANK_COLORS.length]!;
+  }
+
+  private pickSpawnX(): number {
+    const placed: number[] = [];
+    this.state.players.forEach((p) => placed.push(p.x));
+    const minSpacing = 200;
+    for (let attempt = 0; attempt < 12; attempt++) {
+      const x = 150 + Math.random() * (WORLD.WIDTH - 300);
+      if (placed.every((px) => Math.abs(px - x) >= minSpacing)) return x;
+    }
+    const slot = this.state.players.size + 1;
+    const total = slot + 1;
+    return (WORLD.WIDTH / (total + 1)) * slot;
+  }
+
+  private startMatch(): void {
+    if (this.state.phase !== "countdown") return;
+    const ids = Array.from(this.state.players.keys());
+    if (ids.length < MODES[this.mode].minPlayers) {
+      this.state.phase = "waiting";
+      this.state.players.forEach((p) => (p.ready = false));
+      return;
+    }
+    shuffle(ids);
+    this.turnOrder = ids;
+    this.turnIndex = -1;
+    this.state.phase = "playing";
+    this.state.matchStartedAt = Date.now();
+    this.matchStartedAtMs = this.state.matchStartedAt;
+    this.state.turnNumber = 0;
+    this.logEvent({ kind: "start", players: ids, mode: this.mode });
+    matchesStarted.inc({ mode: this.mode });
+    this.advanceTurn();
+  }
+
+  private advanceTurn(): void {
+    if (this.state.phase !== "playing") return;
+    if (this.turnOrder.length === 0) {
+      this.endMatch(null);
+      return;
+    }
+    let tries = 0;
+    do {
+      this.turnIndex = (this.turnIndex + 1) % this.turnOrder.length;
+      tries++;
+    } while (
+      tries <= this.turnOrder.length &&
+      this.state.players.get(this.turnOrder[this.turnIndex]!)?.dead
+    );
+    const id = this.turnOrder[this.turnIndex]!;
+    const p = this.state.players.get(id);
+    if (!p) return;
+    p.fuel = this.state.fuelPerTurn >= 0 ? this.state.fuelPerTurn : TURN.FUEL_PER_TURN;
+    p.charging = false;
+    this.turnFired = false;
+    this.state.currentTurnId = id;
+    this.state.turnEndsAt = Date.now() + (this.state.turnDurationSec > 0 ? this.state.turnDurationSec : 30) * 1000;
+    this.state.wind = rollWind(this.state.windMax);
+    this.state.turnNumber += 1;
+    this.nextTurnAt = 0;
+    const meta = this.sessions.get(id);
+    if (meta?.bot) meta.bot.startTurn(p);
+    this.broadcastEvent({
+      type: "turn",
+      tankId: id,
+      endsAt: this.state.turnEndsAt,
+      turnNumber: this.state.turnNumber,
+    });
+    this.logEvent({ kind: "turn", id, wind: this.state.wind });
+  }
+
+  private scheduleEndOfTurn(): void {
+    if (this.nextTurnAt === 0) this.nextTurnAt = -1;
+  }
+
+  private tick(): void {
+    const now = Date.now();
+    if (this.state.phase === "playing") {
+      const p = this.state.players.get(this.state.currentTurnId);
+      const meta = this.sessions.get(this.state.currentTurnId);
+      if (p && meta) {
+        if (meta.bot) {
+          meta.bot.tick(p, now, this.dt);
+          // Drive the hull only when the brain is actively repositioning.
+          // Calling applyInput unconditionally would double-tick charging
+          // (bot.tick already advances power at its own rate).
+          if (!this.turnFired) {
+            const botInput = meta.bot.getInput();
+            if (botInput.left || botInput.right) {
+              this.world.applyInput(p, botInput, this.dt);
+            }
+          }
+          if (meta.bot.wantsToFire(now)) {
+            // Ensure world.fire() sees a chargeable state.
+            if (!p.charging) p.charging = true;
+            this.fireCurrent(p);
+            meta.bot.consumeFire();
+          }
+        } else {
+          // Once the player has fired, the turn is over in all but name —
+          // freeze their inputs until rotation advances.
+          if (!this.turnFired) {
+            this.world.applyInput(p, meta.input, this.dt);
+          }
+        }
+      }
+    }
+
+    const telemetry = this.world.step(this.dt);
+    for (const ex of telemetry.explosions) {
+      this.broadcastEvent({
+        type: "explosion",
+        x: ex.x,
+        y: ex.y,
+        radius: ex.radius,
+        weapon: ex.weapon,
+      });
+      this.logEvent({ kind: "explosion", ...ex });
+    }
+    for (const d of telemetry.damages) {
+      this.broadcastEvent({
+        type: "damage",
+        tankId: d.tankId,
+        amount: d.amount,
+        x: d.x,
+        y: d.y,
+      });
+      if (d.killed) {
+        const killer = this.state.players.get(d.ownerId);
+        const victim = this.state.players.get(d.tankId);
+        this.broadcastEvent({
+          type: "kill",
+          killerId: killer?.id ?? null,
+          killerName: killer?.name ?? null,
+          victimId: d.tankId,
+          victimName: victim?.name ?? "Unknown",
+          weapon: d.weapon,
+        });
+      }
+    }
+    for (const id of telemetry.deaths) {
+      this.broadcastEvent({ type: "death", tankId: id });
+      this.logEvent({ kind: "death", id });
+    }
+    this.world.settleAllTanks();
+
+    if (telemetry.deaths.length > 0) this.checkWin();
+
+    if (this.state.phase === "playing") {
+      if (this.nextTurnAt === -1 && !this.world.hasLiveProjectiles()) {
+        this.nextTurnAt = now + TURN.BETWEEN_TURNS_MS;
+      }
+      if (this.nextTurnAt > 0 && now >= this.nextTurnAt) {
+        this.advanceTurn();
+      } else if (this.nextTurnAt === 0 && now >= this.state.turnEndsAt) {
+        this.scheduleEndOfTurn();
+      }
+    }
+  }
+
+  private checkWin(): void {
+    if (this.state.phase !== "playing") return;
+    const alive = Array.from(this.state.players.values()).filter((p) => !p.dead);
+    if (alive.length <= 1 && this.state.players.size > 1) {
+      this.endMatch(alive[0]?.id ?? null);
+    }
+  }
+
+  private endMatch(winnerSessionId: string | null): void {
+    if (this.state.phase === "ended") return;
+    this.state.phase = "ended";
+    this.state.matchEndedAt = Date.now();
+    const winner = winnerSessionId
+      ? this.state.players.get(winnerSessionId)
+      : null;
+    this.state.winnerId = winner?.id ?? "";
+    this.broadcastEvent({ type: "gameOver", winnerId: winner?.id ?? null });
+    matchesFinished.inc({
+      mode: this.mode,
+      outcome: winner ? "winner" : "stalemate",
+    });
+    this.logEvent({ kind: "end", winnerId: winner?.id ?? null });
+    this.persistFinishedMatch(winner ?? null).catch((err) =>
+      logger.error({ err }, "persist match failed"),
+    );
+  }
+
+  private async persistFinishedMatch(winner: Player | null): Promise<void> {
+    if (this.persisted) return;
+    this.persisted = true;
+    const players = Array.from(this.state.players.values());
+    const placements: number[] = players.map((p) =>
+      winner && p.id === winner.id ? 0 : 1,
+    );
+    const nonWinners = players
+      .map((p, i) => ({ p, i }))
+      .filter(({ p }) => !winner || p.id !== winner.id)
+      .sort((a, b) => b.p.damageDealt - a.p.damageDealt);
+    nonWinners.forEach(({ i }, rank) => {
+      placements[i] = winner ? rank + 1 : rank;
+    });
+    try {
+      await persistMatch({
+        mode: this.mode,
+        startedAt: new Date(this.matchStartedAtMs || Date.now()),
+        endedAt: new Date(),
+        winnerUserId: winner?.userId ? winner.userId : null,
+        summary: {
+          seed: this.state.terrain.seed,
+          wind: this.state.wind,
+          biome: this.state.biome,
+          inviteCode: this.state.inviteCode || null,
+        },
+        events: this.eventLog,
+        players,
+        placements,
+      });
+    } catch (err) {
+      logger.error({ err }, "match persist failed");
+    }
+  }
+
+  private startRematch(): void {
+    this.rematchVotes.clear();
+    this.persisted = false;
+    this.eventLog = [];
+    this.state.phase = "waiting";
+    this.state.winnerId = "";
+    this.state.matchStartedAt = 0;
+    this.state.matchEndedAt = 0;
+    this.state.turnNumber = 0;
+    // New terrain + biome each rematch for variety.
+    const newBiome = randomBiome();
+    this.state.biome = newBiome;
+    const newSeed = Math.floor(Math.random() * 2 ** 31);
+    this.world = new World(this.state, newSeed, newBiome);
+    this.state.wind = rollWind();
+    // Reset players.
+    this.state.projectiles.clear();
+    this.state.fires.clear();
+    this.state.players.forEach((p) => {
+      p.hp = TANK.MAX_HP;
+      p.fuel = TURN.FUEL_PER_TURN;
+      p.power = 0;
+      p.charging = false;
+      p.weapon = DEFAULT_LOADOUT[0]!;
+      p.angle = 45;
+      p.dead = false;
+      p.ready = p.bot; // bots auto-ready; humans must re-ready.
+      p.kills = 0;
+      p.deaths = 0;
+      p.damageDealt = 0;
+      p.shotsFired = 0;
+      this.initAmmo(p);
+      const spawnX = this.pickSpawnX();
+      p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+      this.world.spawnTankAt(p, spawnX);
+    });
+    this.setMetadata({
+      mode: this.mode,
+      ranked: MODES[this.mode].ranked,
+      biome: newBiome,
+      inviteCode: this.state.inviteCode || undefined,
+    });
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: "Rematch: new map ready.",
+      at: Date.now(),
+    });
+  }
+
+  private logEvent(evt: Record<string, unknown>): void {
+    this.eventLog.push({
+      t: Date.now() - (this.matchStartedAtMs || Date.now()),
+      ...evt,
+    });
+    if (this.eventLog.length > 10_000) this.eventLog.splice(0, 5_000);
+  }
+
+  private broadcastEvent(evt: Record<string, unknown>): void {
+    this.broadcast("event", evt);
+  }
+}
+
+function rollWind(maxWind: number = WORLD.MAX_WIND): number {
+  return (Math.random() * 2 - 1) * maxWind;
+}
+
+function rateAllow(bucket: number[], count: number, windowMs: number): boolean {
+  const now = Date.now();
+  while (bucket.length && now - bucket[0]! > windowMs) bucket.shift();
+  if (bucket.length >= count) return false;
+  bucket.push(now);
+  return true;
+}
+
+function shuffle<T>(arr: T[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j]!, arr[i]!];
+  }
+}
+
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+function generateInviteCode(): string {
+  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let out = "";
+  for (let i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return out;
+}
+
+async function resolveIdentity(
+  options: RoomJoinOptions,
+): Promise<{
+  userId: string;
+  username: string;
+  mmr: number;
+  loadout?: RoomJoinOptions["loadout"];
+} | null> {
+  const token = options[ROOM_OPTIONS_KEYS.ACCESS_TOKEN as "accessToken"];
+  if (!token) return null;
+  try {
+    const claims = await verifyAccessToken(token);
+    const row = await db.query.users.findFirst({
+      where: eq(schema.users.id, claims.sub),
+    });
+    if (!row) return null;
+    return { userId: row.id, username: row.username, mmr: row.mmr };
+  } catch {
+    return null;
+  }
+}

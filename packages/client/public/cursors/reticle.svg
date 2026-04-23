@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <!-- Dark outline for contrast on bright terrain -->
+  <g stroke="#000" stroke-width="2.2" fill="none" opacity="0.55" stroke-linecap="round">
+    <circle cx="16" cy="16" r="10"/>
+    <line x1="16" y1="2" x2="16" y2="8"/>
+    <line x1="16" y1="24" x2="16" y2="30"/>
+    <line x1="2" y1="16" x2="8" y2="16"/>
+    <line x1="24" y1="16" x2="30" y2="16"/>
+  </g>
+  <!-- Bright tactical reticle on top -->
+  <g stroke="#ffba3a" stroke-width="1.1" fill="none" stroke-linecap="round">
+    <circle cx="16" cy="16" r="10"/>
+    <line x1="16" y1="2" x2="16" y2="8"/>
+    <line x1="16" y1="24" x2="16" y2="30"/>
+    <line x1="2" y1="16" x2="8" y2="16"/>
+    <line x1="24" y1="16" x2="30" y2="16"/>
+    <line x1="16" y1="11" x2="16" y2="13"/>
+    <line x1="16" y1="19" x2="16" y2="21"/>
+    <line x1="11" y1="16" x2="13" y2="16"/>
+    <line x1="19" y1="16" x2="21" y2="16"/>
+  </g>
+  <circle cx="16" cy="16" r="1.4" fill="#ffba3a"/>
+  <circle cx="16" cy="16" r="1.4" fill="none" stroke="#000" stroke-width="0.6" opacity="0.7"/>
+</svg>

@@ -1,0 +1,210 @@
+export type WeaponId =
+  | "shell"
+  | "heavy"
+  | "cluster"
+  | "dirt"
+  | "skipper"
+  | "grenade"
+  | "napalm"
+  | "airstrike"
+  | "mirv";
+
+export interface WeaponDef {
+  id: WeaponId;
+  name: string;
+  /** base damage at ground zero */
+  damage: number;
+  /** explosion radius in world pixels */
+  radius: number;
+  /** visual tint for the projectile */
+  tint: number;
+  /** radius in pixels of the projectile sprite */
+  projectileRadius: number;
+  /** how much terrain the explosion removes, as fraction of blast radius */
+  digFactor: number;
+  /** sub-munitions released on detonation */
+  cluster?: {
+    count: number;
+    child: WeaponId;
+    /** initial spread speed */
+    spread: number;
+  };
+  /** spawn `count` additional projectiles from above at ex, marching across */
+  airstrike?: {
+    count: number;
+    spacing: number;
+    /** height above terrain at which they spawn */
+    altitude: number;
+  };
+  /** for "dirt": adds terrain instead of removing */
+  addsTerrain?: boolean;
+  /** bounces before detonation (0 = explode on impact) */
+  bounces?: number;
+  /** lingering fire patch: seconds of persistence; damage per tick radius */
+  napalm?: {
+    durationSec: number;
+    radius: number;
+    damagePerSec: number;
+    tileCount: number;
+  };
+  /** mid-flight split into N children after `splitAfterSec` seconds of flight */
+  mirv?: {
+    count: number;
+    child: WeaponId;
+    splitAfterSec: number;
+    spread: number;
+  };
+  fireSfx: string;
+  explodeSfx: string;
+  /** short description for UI */
+  blurb: string;
+  /** Rounds available per match. `undefined` → unlimited (e.g. the default
+   *  shell). Strong weapons get a small stockpile so players are forced to
+   *  pick their spots instead of spamming the highest-damage option. */
+  maxAmmo?: number;
+}
+
+export const WEAPONS: Record<WeaponId, WeaponDef> = {
+  shell: {
+    id: "shell",
+    name: "Shell",
+    damage: 45,
+    radius: 55,
+    tint: 0xffe066,
+    projectileRadius: 4,
+    digFactor: 1.0,
+    fireSfx: "fire_small",
+    explodeSfx: "boom_small",
+    blurb: "Standard HE round. Reliable and unlimited.",
+    // maxAmmo omitted — the default round is always available so a player
+    // can never run dry on the basic option.
+  },
+  heavy: {
+    id: "heavy",
+    name: "Heavy Shell",
+    damage: 80,
+    radius: 90,
+    tint: 0xff6b35,
+    projectileRadius: 6,
+    digFactor: 1.1,
+    fireSfx: "fire_big",
+    explodeSfx: "boom_big",
+    blurb: "Big dumb boom. Leaves craters. Scarce — save for the kill shot.",
+    maxAmmo: 3,
+  },
+  cluster: {
+    id: "cluster",
+    name: "Cluster Bomb",
+    damage: 20,
+    radius: 35,
+    tint: 0x6ee7ff,
+    projectileRadius: 5,
+    digFactor: 0.6,
+    cluster: { count: 6, child: "shell", spread: 260 },
+    fireSfx: "fire_small",
+    explodeSfx: "boom_small",
+    blurb: "Detonates into six bomblets — great against clustered foes.",
+    maxAmmo: 4,
+  },
+  dirt: {
+    id: "dirt",
+    name: "Dirt Clod",
+    damage: 5,
+    radius: 70,
+    tint: 0x9a6b3a,
+    projectileRadius: 5,
+    digFactor: 1.0,
+    addsTerrain: true,
+    fireSfx: "fire_small",
+    explodeSfx: "thud",
+    blurb: "Adds a terrain mound. Build walls, bury enemies.",
+    maxAmmo: 5,
+  },
+  skipper: {
+    id: "skipper",
+    name: "Skipper",
+    damage: 30,
+    radius: 45,
+    tint: 0xff3b6b,
+    projectileRadius: 4,
+    digFactor: 0.8,
+    bounces: 2,
+    fireSfx: "fire_small",
+    explodeSfx: "boom_small",
+    blurb: "Bounces twice. Pitch into valleys and behind cover.",
+    maxAmmo: 6,
+  },
+  grenade: {
+    id: "grenade",
+    name: "Grenade",
+    damage: 55,
+    radius: 60,
+    tint: 0x8aff5e,
+    projectileRadius: 5,
+    digFactor: 1.0,
+    bounces: 3,
+    fireSfx: "fire_small",
+    explodeSfx: "boom_small",
+    blurb: "Rolls and bounces three times before popping.",
+    maxAmmo: 5,
+  },
+  napalm: {
+    id: "napalm",
+    name: "Napalm",
+    damage: 15,
+    radius: 40,
+    tint: 0xff5e2e,
+    projectileRadius: 5,
+    digFactor: 0.3,
+    napalm: {
+      durationSec: 6,
+      radius: 120,
+      damagePerSec: 12,
+      tileCount: 9,
+    },
+    fireSfx: "fire_big",
+    explodeSfx: "boom_small",
+    blurb: "Leaves a burning zone for six seconds — area denial.",
+    maxAmmo: 3,
+  },
+  airstrike: {
+    id: "airstrike",
+    name: "Airstrike",
+    damage: 40,
+    radius: 50,
+    tint: 0xffffff,
+    projectileRadius: 4,
+    digFactor: 0.9,
+    airstrike: { count: 4, spacing: 60, altitude: 60 },
+    fireSfx: "fire_small",
+    explodeSfx: "boom_big",
+    blurb: "Calls in four vertical shells near impact. Precious — two rounds.",
+    maxAmmo: 2,
+  },
+  mirv: {
+    id: "mirv",
+    name: "MIRV",
+    damage: 30,
+    radius: 45,
+    tint: 0xcf5eff,
+    projectileRadius: 5,
+    digFactor: 0.8,
+    mirv: { count: 5, child: "shell", splitAfterSec: 0.9, spread: 180 },
+    fireSfx: "fire_big",
+    explodeSfx: "boom_big",
+    blurb: "Splits into five warheads mid-flight. Only two rounds.",
+    maxAmmo: 2,
+  },
+};
+
+export const DEFAULT_LOADOUT: WeaponId[] = [
+  "shell",
+  "heavy",
+  "cluster",
+  "grenade",
+  "napalm",
+  "airstrike",
+  "mirv",
+  "skipper",
+  "dirt",
+];

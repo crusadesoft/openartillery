@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="20" height="24" viewBox="0 0 20 24">
+  <!-- Black outline silhouette -->
+  <path d="M2 1 L2 17 L6 13 L9 20 L12 19 L9 12 L15 12 Z" fill="#0b0c10" stroke="#0b0c10" stroke-width="2" stroke-linejoin="round"/>
+  <!-- Amber fill on top -->
+  <path d="M2 1 L2 17 L6 13 L9 20 L12 19 L9 12 L15 12 Z" fill="#f0c46a" stroke="#0b0c10" stroke-width="0.6" stroke-linejoin="round"/>
+</svg>
