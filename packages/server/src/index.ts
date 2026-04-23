@@ -40,8 +40,11 @@ app.use(
               // it CSP blocks the beacon script.
               "script-src": ["'self'", "https://static.cloudflareinsights.com"],
               // Phaser + tank previews draw to canvas and use inline
-              // <style> from our CSS-in-JS; allow inline styles.
-              "style-src": ["'self'", "'unsafe-inline'"],
+              // <style> from our CSS-in-JS; allow inline styles and
+              // the Google Fonts stylesheet the index.html pulls in.
+              "style-src": ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+              // Google Fonts serves the actual font files from gstatic.
+              "font-src": ["'self'", "data:", "https://fonts.gstatic.com"],
               // Tank/weapon sprites are data: URIs generated at runtime.
               "img-src": ["'self'", "data:", "blob:"],
               // Drop the upgrade-insecure-requests directive so local dev
