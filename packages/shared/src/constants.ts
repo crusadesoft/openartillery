@@ -26,11 +26,17 @@ export const TANK = {
   WIDTH: 36,
   HEIGHT: 18,
   MAX_HP: 100,
-  /** Length of the visible barrel sprite; must match drawn length in BootScene. */
-  BARREL_LENGTH: 26,
-  /** Offset of the barrel pivot inside the tank container, mirrored by facing. */
+  /** Length of the visible barrel sprite at the standard style.
+   *  Derived from `tankPreview.barrelLenMap.standard * 48 = 22.08`,
+   *  rounded for cleanliness. Server uses this when spawning
+   *  projectiles from the muzzle tip. */
+  BARREL_LENGTH: 22,
+  /** Offset of the barrel pivot inside the tank container, mirrored by
+   *  facing. Derived from the canonical hull renderer's barrel pivot
+   *  relative to hull centre (heavy hull + standard turret). Slight
+   *  variance for other body styles is negligible gameplay-wise. */
   BARREL_PIVOT_X: 2,
-  BARREL_PIVOT_Y: -4,
+  BARREL_PIVOT_Y: -11,
   MIN_ANGLE_DEG: -90,
   MAX_ANGLE_DEG: 90,
   AIM_RATE_DEG_PER_SEC: 45,

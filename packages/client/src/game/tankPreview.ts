@@ -30,7 +30,33 @@ export interface TankPreviewOpts {
   patternColor?: string; // hex "#rrggbb" for camo breaks
   decal?: DecalStyle;
   facing?: 1 | -1;
+  /** Skip the barrel when the caller will compose it as a separate
+   *  sprite (used by the in-game Phaser pipeline so the barrel can
+   *  rotate independently for aim). */
+  skipBarrel?: boolean;
 }
+
+/** Canonical proportion maps — shared with the in-game textures so the
+ *  silhouette is identical. */
+const hullFracMap: Record<BodyStyle, number> = {
+  heavy: 0.34, light: 0.30, assault: 0.26, scout: 0.28, siege: 0.38,
+};
+const turretWMap: Record<TurretStyle, number> = {
+  standard: 0.34, angular: 0.36, low: 0.42, wedge: 0.38, dome: 0.32,
+};
+const turretHMap: Record<TurretStyle, number> = {
+  standard: 0.22, angular: 0.20, low: 0.14, wedge: 0.22, dome: 0.28,
+};
+const barrelLenMap: Record<BarrelStyle, number> = {
+  standard: 0.46, heavy: 0.42, long: 0.58, sniper: 0.66, stubby: 0.32,
+};
+const barrelThickMap: Record<BarrelStyle, number> = {
+  standard: 0.05, heavy: 0.065, long: 0.05, sniper: 0.038, stubby: 0.085,
+};
+/** Reference width used when the in-game barrel sprite is baked on its
+ *  own canvas. All length/thickness ratios use this as the denominator
+ *  so a barrel still matches the hull it was designed for. */
+const BARREL_REF_W = 48;
 
 export function drawTankPreview(
   ctx: CanvasRenderingContext2D,
@@ -44,12 +70,10 @@ export function drawTankPreview(
     patternColor = "#1a140c",
     decal = "none",
     facing = 1,
+    skipBarrel = false,
   } = opts;
 
   // Layout — hull height is a fraction of width so treads always scale.
-  const hullFracMap: Record<BodyStyle, number> = {
-    heavy: 0.34, light: 0.30, assault: 0.26, scout: 0.28, siege: 0.38,
-  };
   const slopeFracMap: Record<BodyStyle, number> = {
     heavy: 0.17, light: 0.26, assault: 0.11, scout: 0.32, siege: 0.20,
   };
@@ -264,12 +288,6 @@ export function drawTankPreview(
   ctx.fillRect(x + 4, hullTop + 4 + boxH * 0.5, boxW, 0.8);
 
   // ——— Turret ———
-  const turretWMap: Record<TurretStyle, number> = {
-    standard: 0.34, angular: 0.36, low: 0.42, wedge: 0.38, dome: 0.32,
-  };
-  const turretHMap: Record<TurretStyle, number> = {
-    standard: 0.22, angular: 0.20, low: 0.14, wedge: 0.22, dome: 0.28,
-  };
   const turretW = W * turretWMap[turretStyle];
   const turretH = W * turretHMap[turretStyle];
   const turretCx = x + W * 0.44;
@@ -423,51 +441,63 @@ export function drawTankPreview(
   }
 
   // ——— Barrel ———
-  const barrelLenMap: Record<BarrelStyle, number> = {
-    standard: 0.46, heavy: 0.42, long: 0.58, sniper: 0.66, stubby: 0.32,
-  };
-  const barrelThickMap: Record<BarrelStyle, number> = {
-    standard: 0.05, heavy: 0.065, long: 0.05, sniper: 0.038, stubby: 0.085,
-  };
-  const barrelLen = W * barrelLenMap[barrelStyle];
-  const barrelThick = W * barrelThickMap[barrelStyle];
-  const bX = turretCx + turretW * 0.28;
-  const bY = turretCy - barrelThick / 2;
+  if (!skipBarrel) {
+    const bX = turretCx + turretW * 0.28;
+    const bY = turretCy;
+    drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+  }
+
+  ctx.restore();
+}
+
+/** Barrel renderer — draws a horizontal barrel pivoted on the breech end
+ *  at (bX, bY) where bY is the center-line of the barrel. `refW` is the
+ *  hull width the barrel proportions are scaled against. Exposed so both
+ *  the full composite and the in-game standalone barrel sprite use the
+ *  same geometry. */
+function drawBarrelAt(
+  ctx: CanvasRenderingContext2D,
+  bX: number,
+  bY: number,
+  refW: number,
+  barrelStyle: BarrelStyle,
+): void {
+  const barrelLen = refW * barrelLenMap[barrelStyle];
+  const barrelThick = refW * barrelThickMap[barrelStyle];
+  const bTop = bY - barrelThick / 2;
 
   // Mantle.
   ctx.fillStyle = "#15171e";
-  ctx.fillRect(bX - W * 0.01, bY - 2, W * 0.035, barrelThick + 4);
+  ctx.fillRect(bX - refW * 0.01, bTop - 2, refW * 0.035, barrelThick + 4);
   ctx.fillStyle = "#2a2e3a";
-  ctx.fillRect(bX - W * 0.01, bY, W * 0.035, barrelThick);
+  ctx.fillRect(bX - refW * 0.01, bTop, refW * 0.035, barrelThick);
 
   // Barrel body gradient.
-  const bGrad = ctx.createLinearGradient(0, bY, 0, bY + barrelThick);
+  const bGrad = ctx.createLinearGradient(0, bTop, 0, bTop + barrelThick);
   bGrad.addColorStop(0, "#2d313e");
   bGrad.addColorStop(0.5, "#181a22");
   bGrad.addColorStop(1, "#070810");
   ctx.fillStyle = bGrad;
-  ctx.fillRect(bX, bY, barrelLen, barrelThick);
+  ctx.fillRect(bX, bTop, barrelLen, barrelThick);
 
   // Top highlight.
   ctx.fillStyle = "rgba(255,255,255,0.2)";
-  ctx.fillRect(bX + 2, bY + 1, barrelLen - 4, Math.max(0.6, barrelThick * 0.12));
+  ctx.fillRect(bX + 2, bTop + 1, barrelLen - 4, Math.max(0.6, barrelThick * 0.12));
   // Wear band.
   ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(bX + barrelLen * 0.45, bY, Math.max(1, barrelLen * 0.015), barrelThick);
+  ctx.fillRect(bX + barrelLen * 0.45, bTop, Math.max(1, barrelLen * 0.015), barrelThick);
 
   // Muzzle brake.
   const muzzleW = Math.max(6, barrelLen * 0.18);
   ctx.fillStyle = "#2b2f3c";
-  ctx.fillRect(bX + barrelLen - muzzleW, bY - 1, muzzleW, barrelThick + 2);
+  ctx.fillRect(bX + barrelLen - muzzleW, bTop - 1, muzzleW, barrelThick + 2);
   ctx.fillStyle = "#0a0b10";
-  ctx.fillRect(bX + barrelLen - muzzleW + muzzleW * 0.2, bY + 1, 1, barrelThick - 2);
-  ctx.fillRect(bX + barrelLen - muzzleW + muzzleW * 0.55, bY + 1, 1, barrelThick - 2);
+  ctx.fillRect(bX + barrelLen - muzzleW + muzzleW * 0.2, bTop + 1, 1, barrelThick - 2);
+  ctx.fillRect(bX + barrelLen - muzzleW + muzzleW * 0.55, bTop + 1, 1, barrelThick - 2);
   ctx.fillStyle = "#000";
-  ctx.fillRect(bX + barrelLen - 2, bY + 2, 2, barrelThick - 4);
+  ctx.fillRect(bX + barrelLen - 2, bTop + 2, 2, barrelThick - 4);
   ctx.fillStyle = "rgba(255,255,255,0.28)";
-  ctx.fillRect(bX + barrelLen - muzzleW, bY, muzzleW, 1);
-
-  ctx.restore();
+  ctx.fillRect(bX + barrelLen - muzzleW, bTop, muzzleW, 1);
 }
 
 /** Opinionated full-canvas renderer — same layout the Customize preview
@@ -556,6 +586,144 @@ export function renderLoadoutCanvas(
     patternColor,
     decal,
   });
+}
+
+// ─────────────────── Per-part canvas renderers ───────────────────
+// These exist so the in-game Phaser sprites can be rendered by the SAME
+// drawing code that the Customize preview uses — no duplicated tank
+// artwork. Each function produces an HTMLCanvasElement that can be
+// registered as a Phaser texture via `scene.textures.addCanvas(key, canvas)`.
+
+/** Canonical in-world hull width per body style (pixels). Used so the
+ *  per-player textures line up with the physics constants defined in
+ *  `shared/constants.ts`. */
+export const HULL_WIDTHS: Record<BodyStyle, number> = {
+  heavy: 48, light: 40, assault: 50, scout: 36, siege: 54,
+};
+
+export interface HullRenderOpts {
+  bodyStyle: BodyStyle;
+  turretStyle: TurretStyle;
+  primary: string;
+  accent: string;
+  pattern: PatternStyle;
+  patternColor: string;
+  decal: DecalStyle;
+}
+
+export interface HullRenderResult {
+  canvas: HTMLCanvasElement;
+  /** Logical (pre-DPR-scale) canvas width. */
+  widthLogical: number;
+  /** Logical canvas height. */
+  heightLogical: number;
+  /** Barrel pivot point in canvas logical pixels — where the breech end
+   *  of the barrel sprite should attach. */
+  barrelPivotX: number;
+  barrelPivotY: number;
+  /** Hull center in canvas logical pixels — align this to the container
+   *  origin so the server's player.x / player.y match the visual. */
+  hullCenterX: number;
+  hullCenterY: number;
+}
+
+const TEXTURE_SCALE = 2;  // internal 2× resolution for supersampling
+
+export function renderHullCanvas(opts: HullRenderOpts): HullRenderResult {
+  const W = HULL_WIDTHS[opts.bodyStyle];
+  const hullH = W * hullFracMap[opts.bodyStyle];
+  const treadH = Math.max(8, W * 0.13);
+  const turretH = W * turretHMap[opts.turretStyle];
+  // How far the turret center sits above the hull top (used to compute
+  // how much top padding the canvas needs so the turret isn't clipped).
+  const turretExtendUp = turretH * 0.75 + 0.25 * turretH; // ≈ turretH
+  const antennaUp = hullH * 0.45 + 4; // +4 for stroke width
+  const topPad = Math.ceil(Math.max(turretExtendUp, antennaUp));
+  const sidePad = 2;
+  const logicalW = W + sidePad * 2;
+  const logicalH = topPad + hullH + treadH + 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = logicalW * TEXTURE_SCALE;
+  canvas.height = logicalH * TEXTURE_SCALE;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(TEXTURE_SCALE, TEXTURE_SCALE);
+
+  drawTankPreview(ctx, {
+    x: sidePad,
+    y: topPad,
+    width: W,
+    bodyStyle: opts.bodyStyle,
+    turretStyle: opts.turretStyle,
+    barrelStyle: "standard", // unused — skipBarrel
+    primary: opts.primary,
+    accent: opts.accent,
+    pattern: opts.pattern,
+    patternColor: opts.patternColor,
+    decal: opts.decal,
+    skipBarrel: true,
+  });
+
+  // Barrel pivot: matches the bX / turretCy used inside drawTankPreview.
+  const turretW = W * turretWMap[opts.turretStyle];
+  const turretCx = sidePad + W * 0.44;
+  const turretCy = topPad - turretH * 0.25;
+  const barrelPivotX = turretCx + turretW * 0.28;
+  const barrelPivotY = turretCy;
+
+  // Hull center (in canvas logical coords).
+  const hullCenterX = sidePad + W / 2;
+  const hullCenterY = topPad + hullH / 2;
+
+  return {
+    canvas,
+    widthLogical: logicalW,
+    heightLogical: logicalH,
+    barrelPivotX, barrelPivotY,
+    hullCenterX, hullCenterY,
+  };
+}
+
+export interface BarrelRenderResult {
+  canvas: HTMLCanvasElement;
+  widthLogical: number;
+  heightLogical: number;
+  /** Pivot point in canvas — breech end, vertical center of the
+   *  barrel. Phaser will setOrigin(pivotX/W, pivotY/H). */
+  pivotX: number;
+  pivotY: number;
+}
+
+export function renderBarrelCanvas(barrelStyle: BarrelStyle): BarrelRenderResult {
+  const W = BARREL_REF_W;
+  const barrelLen = W * barrelLenMap[barrelStyle];
+  const barrelThick = W * barrelThickMap[barrelStyle];
+  // Padding: left side for mantle overhang + tiny buffer, top/bottom for
+  // the 2-pixel-thick mantle frame.
+  const padL = Math.ceil(W * 0.015) + 2;
+  const padR = 2;
+  const padV = 3;
+  const logicalW = padL + barrelLen + padR;
+  const logicalH = padV + barrelThick + padV;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = logicalW * TEXTURE_SCALE;
+  canvas.height = logicalH * TEXTURE_SCALE;
+  const ctx = canvas.getContext("2d")!;
+  ctx.scale(TEXTURE_SCALE, TEXTURE_SCALE);
+
+  // Breech end sits at (padL, padV + barrelThick/2) — that's the pivot.
+  const bX = padL;
+  const bY = padV + barrelThick / 2;
+  drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+
+  return {
+    canvas,
+    widthLogical: logicalW,
+    heightLogical: logicalH,
+    pivotX: bX,
+    pivotY: bY,
+  };
 }
 
 export function shadeHex(hex: string, f: number): string {
