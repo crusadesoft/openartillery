@@ -3,7 +3,6 @@ import { createHash, randomBytes } from "crypto";
 import { config } from "../config.js";
 
 const accessKey = new TextEncoder().encode(config.JWT_ACCESS_SECRET);
-const refreshKey = new TextEncoder().encode(config.JWT_REFRESH_SECRET);
 
 export interface AccessClaims {
   sub: string; // user id

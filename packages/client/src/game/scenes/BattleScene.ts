@@ -11,7 +11,6 @@ import {
   TANK,
   WORLD,
   WEAPONS,
-  type WeaponId,
 } from "@artillery/shared";
 import { Sound } from "../audio/Sound";
 import { TankView } from "../entities/Tank";
@@ -1186,19 +1185,3 @@ export class BattleScene extends Phaser.Scene {
   }
 }
 
-// ───────────────────────── helpers ─────────────────────────
-
-function lerpColor(a: number, b: number, t: number): number {
-  const ar = (a >> 16) & 0xff, ag = (a >> 8) & 0xff, ab = a & 0xff;
-  const br = (b >> 16) & 0xff, bg = (b >> 8) & 0xff, bb = b & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bl = Math.round(ab + (bb - ab) * t);
-  return (r << 16) | (g << 8) | bl;
-}
-function shade(c: number, f: number): number {
-  const r = Math.max(0, Math.min(255, ((c >> 16) & 0xff) * f));
-  const g = Math.max(0, Math.min(255, ((c >> 8) & 0xff) * f));
-  const b = Math.max(0, Math.min(255, (c & 0xff) * f));
-  return (Math.round(r) << 16) | (Math.round(g) << 8) | Math.round(b);
-}

@@ -83,6 +83,7 @@ export class Terrain {
     // columns change in gradually-decreasing amounts toward the rim.
     const xStart = Math.max(0, Math.floor(ex - radius - 2));
     const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius + 2));
+    let touched = false;
     for (let x = xStart; x <= xEnd; x++) {
       const dx = (x - ex) / radius;
       if (dx * dx >= 1) continue;
@@ -92,8 +93,13 @@ export class Terrain {
       const h = this.heights[x]!;
       if (craterSurfaceY > h) {
         this.setHeight(x, Math.min(WORLD.HEIGHT - 1, craterSurfaceY));
+        touched = true;
       }
     }
+    // Skip the slump pass entirely if no column was carved — otherwise a
+    // completely-above-ground explosion still drifts heights via the
+    // binomial blur, which broke idempotency for airbursts.
+    if (!touched) return;
     // Slump pass — two iterations of a light binomial blur over the
     // crater neighbourhood (plus a short spillover). Smooths the rim
     // cliff without erasing the crater's concavity.
@@ -112,14 +118,19 @@ export class Terrain {
     // a clipped sphere top.
     const xStart = Math.max(0, Math.floor(ex - radius - 2));
     const xEnd = Math.min(this.width - 1, Math.ceil(ex + radius + 2));
+    let touched = false;
     for (let x = xStart; x <= xEnd; x++) {
       const dx = (x - ex) / radius;
       if (dx * dx >= 1) continue;
       const lift = radius * (1 - dx * dx);
       const domeTop = ey - lift;
       const h = this.heights[x]!;
-      if (domeTop < h) this.setHeight(x, Math.max(40, domeTop));
+      if (domeTop < h) {
+        this.setHeight(x, Math.max(40, domeTop));
+        touched = true;
+      }
     }
+    if (!touched) return;
     smoothBand(
       this.heights,
       this.state.heights,

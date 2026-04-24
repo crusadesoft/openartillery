@@ -293,6 +293,8 @@ function useRefCanvas(w: number, h: number, v: EntryDisplay["vehicle"]) {
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, w, h);
     drawMiniTank(ctx, w, h, v);
+    // Fine-grained deps — listing v whole would churn on every parent render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [w, h, v.body, v.turret, v.barrel, v.primary, v.accent]);
   return ref;
 }

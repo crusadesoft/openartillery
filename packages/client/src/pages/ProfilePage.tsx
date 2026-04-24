@@ -283,6 +283,8 @@ function OperatorVehicleCard({ username }: { username: string }): JSX.Element {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawProfileTank(ctx, W, H, l);
+    // `l` is derived from `username` — one dep is enough.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [username]);
   return (
     <div className="self-vehicle">
@@ -310,6 +312,8 @@ function SelfVehicleCard(): JSX.Element {
     if (!ctx) return;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     drawProfileTank(ctx, W, H, l);
+    // Fine-grained deps — listing l whole churns on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [l.body, l.turret, l.barrel, l.primaryColor, l.accentColor]);
   return (
     <div className="self-vehicle">
