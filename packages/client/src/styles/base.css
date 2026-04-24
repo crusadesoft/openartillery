@@ -1,0 +1,62 @@
+/* ─────────────────── Custom cursors ─────────────────── */
+/* Tactical set: amber arrow for menus, tactical glove for interactive
+   controls, bright amber reticle for the battle canvas. Each includes
+   the hot-spot coordinates and an OS fallback. */
+html, body {
+  cursor: url("/cursors/arrow.svg") 2 1, default;
+}
+a, button, [role="button"], label, select,
+.pill, .mode-card, .switch, .part-tile, .swatch, .weapon-tile,
+input[type="checkbox"], input[type="radio"], input[type="range"] {
+  cursor: url("/cursors/pointer.svg") 8 1, pointer;
+}
+input[type="text"], input[type="email"], input[type="password"],
+input[type="number"], input[type="search"], textarea {
+  cursor: text;
+}
+#phaser-host, #phaser-host canvas {
+  cursor: url("/cursors/reticle.svg") 16 16, crosshair;
+}
+button:disabled, .weapon-tile:disabled, .weapon-tile.empty {
+  cursor: not-allowed;
+}
+
+* { box-sizing: border-box; }
+html, body, #root {
+  margin: 0; padding: 0; height: 100%;
+  color: var(--ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  /* No opaque background — .backdrop paints the texture. */
+  background: transparent;
+  /* Game UI should feel like an app, not a document. Kill the text-caret
+     cursor on text spans and block accidental selection/highlight. */
+  cursor: default;
+  user-select: none;
+  -webkit-user-select: none;
+}
+/* Re-enable for actual text inputs / textareas only. */
+input, textarea, [contenteditable="true"] {
+  cursor: text;
+  user-select: text;
+  -webkit-user-select: text;
+}
+/* Inputs with explicit text-type semantics still get the I-beam. */
+input[type="text"], input[type="password"], input[type="email"], input[type="search"] {
+  cursor: text;
+}
+button, .swatch, .pill, .mode-card, .weapon-tile, .engagement-list li, .brass-list li,
+.part-tile, .switch, .mp-head, .mp-buttons button, .mp-collapse, .mp-toggle {
+  cursor: pointer;
+}
+a { cursor: pointer; }
+body {
+  overflow: hidden;
+  /* Fallback color visible only until backdrop mounts. */
+  background-color: #1a0f08;
+}
+
+a { color: var(--amber-bright); text-decoration: none; }
+a:hover { text-decoration: underline; }
+button { font-family: inherit; cursor: pointer; color: inherit; }
+input, select { font-family: inherit; }

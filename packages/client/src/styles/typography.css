@@ -1,0 +1,14 @@
+/* Typography */
+h1, h2, h3 {
+  font-family: var(--font-display);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 0 0 12px;
+  color: var(--ink);
+  font-weight: 700;
+}
+h1 { font-size: 38px; letter-spacing: 0.12em; font-weight: 800; }
+h2 { font-size: 20px; letter-spacing: 0.1em; }
+h3 { font-size: 14px; letter-spacing: 0.1em; font-weight: 600; color: var(--khaki-bright); }
+p { line-height: 1.55; }
+.mono, code { font-family: var(--font-mono); }

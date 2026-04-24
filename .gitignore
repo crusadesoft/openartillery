@@ -12,3 +12,4 @@ packages/*/dist/
 packages/*/tsconfig.tsbuildinfo
 .playwright-cli/
 .claude/
+CLAUDE.md

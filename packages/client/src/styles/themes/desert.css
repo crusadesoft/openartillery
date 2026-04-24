@@ -1,0 +1,21 @@
+:root[data-theme="desert"] {
+  --theme-accent: #c47a2c;
+  --theme-accent-bright: #ffb456;
+  --theme-accent-rgb: 255, 180, 86;
+  --theme-brand: #ffc878;
+  --theme-card-texture: url("/textures/ui/desert.jpg");
+  --theme-card-wash: linear-gradient(90deg, rgba(210,130,50,0.18), rgba(210,130,50,0) 120px);
+  --theme-card-tint: linear-gradient(180deg, rgba(42,24,12,0.75), rgba(20,12,6,0.88));
+  --theme-btn-primary-fill: #a8621a;
+  --theme-btn-primary-gradient: linear-gradient(180deg, rgba(240,170,70,0.55), rgba(110,50,10,0.9));
+  --theme-btn-primary-border: #3a1c04;
+  --theme-btn-primary-color: #fff2d4;
+  --theme-btn-primary-shadow: rgba(200, 120, 40, 0.45);
+  --theme-pill-active: linear-gradient(180deg, #e09040 0%, #8a4010 100%);
+  --theme-pill-active-border: #3a1c04;
+  --theme-pill-active-color: #fff2d4;
+  --theme-mode-active-bg: linear-gradient(180deg, rgba(120,60,20,0.5), rgba(60,30,10,0.75));
+  --theme-nav-underline: rgba(200, 140, 60, 0.25);
+  --theme-splash-glow-a: rgba(255, 210, 110, 0.35);
+  --theme-splash-glow-b: rgba(220, 130, 50, 0.22);
+}

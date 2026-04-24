@@ -5,6 +5,16 @@ import { SfxButton } from "../ui/SfxButton";
 
 interface Props { navigate: (r: Route) => void; }
 
+export type ThemeId = "rust" | "desert" | "arctic" | "dusk" | "jungle";
+
+export const THEMES: ReadonlyArray<{ id: ThemeId; label: string; blurb: string }> = [
+  { id: "rust",    label: "Rust",    blurb: "Oxidized metal · default" },
+  { id: "desert",  label: "Desert",  blurb: "Sun-bleached ochre" },
+  { id: "arctic",  label: "Arctic",  blurb: "Cold steel · snow glare" },
+  { id: "dusk",    label: "Dusk",    blurb: "Violet twilight" },
+  { id: "jungle",  label: "Jungle",  blurb: "Olive canopy" },
+];
+
 export interface StoredSettings {
   masterVolume: number;
   musicVolume: number;
@@ -13,6 +23,7 @@ export interface StoredSettings {
   uiClicks: boolean;
   reduceMotion: boolean;
   cameraShake: boolean;
+  theme: ThemeId;
 }
 
 const DEFAULTS: StoredSettings = {
@@ -23,6 +34,7 @@ const DEFAULTS: StoredSettings = {
   uiClicks: true,
   reduceMotion: false,
   cameraShake: true,
+  theme: "rust",
 };
 
 const STORAGE_KEY = "artillery:settings";
@@ -31,7 +43,9 @@ export function loadSettings(): StoredSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
+    const parsed = { ...DEFAULTS, ...JSON.parse(raw) };
+    if (!THEMES.some((t) => t.id === parsed.theme)) parsed.theme = DEFAULTS.theme;
+    return parsed;
   } catch { return { ...DEFAULTS }; }
 }
 
@@ -42,6 +56,7 @@ export function saveSettings(s: StoredSettings): void {
   Sound.setSfxVolume(s.sfxVolume);
   Sound.setUiVolume(s.uiClicks ? s.uiVolume : 0);
   document.documentElement.dataset.reducedMotion = s.reduceMotion ? "1" : "0";
+  document.documentElement.dataset.theme = s.theme;
 }
 
 export function applySettingsOnBoot(): void {
@@ -67,6 +82,27 @@ export function SettingsPage({ navigate }: Props): JSX.Element {
         <Toggle label="UI click sounds" value={s.uiClicks} onChange={(v) => setS({ ...s, uiClicks: v })} />
         <Toggle label="Camera shake on explosions" value={s.cameraShake} onChange={(v) => setS({ ...s, cameraShake: v })} />
         <Toggle label="Reduce motion" value={s.reduceMotion} onChange={(v) => setS({ ...s, reduceMotion: v })} />
+
+        <div className="field" style={{ marginTop: 14 }}>
+          <label style={{ display: "block", marginBottom: 8 }}>Menu theme</label>
+          <div className="theme-picker">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`theme-swatch ${s.theme === t.id ? "on" : ""}`}
+                data-theme-preview={t.id}
+                onClick={() => setS({ ...s, theme: t.id })}
+                aria-pressed={s.theme === t.id}
+                title={t.blurb}
+              >
+                <span className="theme-chip" aria-hidden />
+                <span className="theme-label">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div style={{ marginTop: 20 }}>
           <SfxButton className="secondary-btn" onClick={() => setS({ ...DEFAULTS })}>Restore defaults</SfxButton>
           <SfxButton className="ghost-btn" onClick={() => navigate({ name: "home" })}>← Back</SfxButton>

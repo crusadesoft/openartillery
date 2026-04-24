@@ -1,0 +1,63 @@
+/* Design tokens. The `:root` block is the default (rust) palette. Each
+   theme override file in `themes/` retargets the `--theme-*` hook vars for
+   its own [data-theme="..."] selector — see themes/index.css. */
+:root {
+  color-scheme: dark;
+
+  /* Gritty military palette — no neon, no single-hue "Tron" look. */
+  --steel-900: #0e1014;   /* deep gunmetal backdrop */
+  --steel-800: #151820;   /* panel base */
+  --steel-700: #1e222c;   /* panel surface */
+  --steel-600: #2a2f3b;   /* borders */
+  --steel-500: #3a4150;   /* muted text */
+  --ash: #4a4a47;
+  --khaki: #6e6b46;       /* olive drab */
+  --khaki-bright: #a8a070;
+  --rust: #b14f24;        /* oxidized metal */
+  --rust-bright: #e07845;
+  --amber: #d49228;       /* HUD readout */
+  --amber-bright: #ffbe52;
+  --ink: #d9d1c4;         /* weathered paper */
+  --ink-dim: #8d8a80;
+  --ink-faint: #5a5850;
+  --danger: #c03a3a;
+  --danger-bright: #e95b4f;
+  --ok: #85a158;
+  --warn: #d49228;
+
+  --panel: rgba(21, 24, 32, 0.92);
+  --panel-solid: #191c24;
+  --panel-edge: rgba(58, 65, 80, 0.8);
+  --panel-edge-strong: rgba(208, 122, 60, 0.7);
+
+  --font-display: "Oswald", "Orbitron", "Chakra Petch", system-ui, sans-serif;
+  --font-body: "Chakra Petch", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+
+  --ease: cubic-bezier(0.2, 0.7, 0.1, 1);
+  --speed: 220ms;
+
+  /* ───── Theme hooks ─────
+     These drive the theme-aware bits of the UI (card accent, brand color,
+     primary CTA fill, active-state highlights, focus rings). Each
+     [data-theme="..."] file retargets them. Defaults = rust. */
+  --theme-accent: var(--rust);
+  --theme-accent-bright: var(--rust-bright);
+  --theme-accent-rgb: 224, 120, 69;      /* rust-bright rgb — for rgba glows */
+  --theme-brand: var(--rust-bright);
+  --theme-card-texture: url("/textures/ui/rust.jpg");
+  --theme-card-wash: linear-gradient(90deg, rgba(150,60,20,0.15), rgba(150,60,20,0) 120px);
+  --theme-card-tint: linear-gradient(180deg, rgba(24,18,12,0.78), rgba(10,8,6,0.88));
+  --theme-btn-primary-fill: #b14120;
+  --theme-btn-primary-gradient: linear-gradient(180deg, rgba(220,100,40,0.55), rgba(90,20,6,0.9));
+  --theme-btn-primary-border: #3b1508;
+  --theme-btn-primary-color: #ffe7d2;
+  --theme-btn-primary-shadow: rgba(150, 50, 20, 0.45);
+  --theme-pill-active: linear-gradient(180deg, #c4521f 0%, #8f2a0e 100%);
+  --theme-pill-active-border: #3b1508;
+  --theme-pill-active-color: #fff1df;
+  --theme-mode-active-bg: linear-gradient(180deg, rgba(70,30,15,0.5), rgba(40,20,12,0.75));
+  --theme-nav-underline: rgba(120, 90, 40, 0.2);
+  --theme-splash-glow-a: rgba(255, 180, 90, 0.35);
+  --theme-splash-glow-b: rgba(200, 80, 30, 0.22);
+}

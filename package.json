@@ -2,7 +2,7 @@
   "name": "artillery",
   "private": true,
   "version": "0.1.0",
-  "description": "Browser-based turn-based multiplayer artillery game (UMAG-inspired).",
+  "description": "Free multiplayer browser artillery game — turn-based tank combat with destructible terrain, wind, and gravity.",
   "workspaces": [
     "packages/shared",
     "packages/server",

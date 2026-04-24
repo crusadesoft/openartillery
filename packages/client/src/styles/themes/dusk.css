@@ -1,0 +1,21 @@
+:root[data-theme="dusk"] {
+  --theme-accent: #9644c4;
+  --theme-accent-bright: #d488ff;
+  --theme-accent-rgb: 212, 136, 255;
+  --theme-brand: #e2a6ff;
+  --theme-card-texture: url("/textures/ui/dusk.jpg");
+  --theme-card-wash: linear-gradient(90deg, rgba(160,90,200,0.18), rgba(160,90,200,0) 120px);
+  --theme-card-tint: linear-gradient(180deg, rgba(20,10,32,0.78), rgba(10,4,20,0.92));
+  --theme-btn-primary-fill: #6a2a9a;
+  --theme-btn-primary-gradient: linear-gradient(180deg, rgba(200,110,255,0.5), rgba(60,20,100,0.92));
+  --theme-btn-primary-border: #220a3a;
+  --theme-btn-primary-color: #f3e0ff;
+  --theme-btn-primary-shadow: rgba(140, 60, 200, 0.4);
+  --theme-pill-active: linear-gradient(180deg, #b060e0 0%, #4a1a70 100%);
+  --theme-pill-active-border: #220a3a;
+  --theme-pill-active-color: #f5e5ff;
+  --theme-mode-active-bg: linear-gradient(180deg, rgba(70,30,110,0.55), rgba(40,15,60,0.8));
+  --theme-nav-underline: rgba(180, 110, 220, 0.22);
+  --theme-splash-glow-a: rgba(220, 160, 255, 0.32);
+  --theme-splash-glow-b: rgba(150, 80, 200, 0.22);
+}
