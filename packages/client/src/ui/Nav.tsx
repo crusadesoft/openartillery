@@ -24,6 +24,7 @@ export function Nav({ navigate }: Props): JSX.Element {
         </SfxButton>
       )}
       <SfxButton onClick={go({ name: "settings" })}>Settings</SfxButton>
+      <SfxButton onClick={go({ name: "about" })}>About</SfxButton>
       <div className="spacer" />
       {session ? (
         <>

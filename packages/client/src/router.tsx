@@ -9,6 +9,7 @@ export type Route =
   | { name: "settings" }
   | { name: "customize" }
   | { name: "arsenal" }
+  | { name: "about" }
   | { name: "profile"; username: string }
   | {
       name: "game";
@@ -40,6 +41,8 @@ function parseHash(hash: string): Route {
       return { name: "customize" };
     case "arsenal":
       return { name: "arsenal" };
+    case "about":
+      return { name: "about" };
     case "profile":
       return { name: "profile", username: parts[1] ?? "" };
     case "game": {
@@ -72,6 +75,7 @@ function routeToHash(route: Route): string {
     case "settings": return "#/settings";
     case "customize": return "#/customize";
     case "arsenal": return "#/arsenal";
+    case "about": return "#/about";
     case "profile": return `#/profile/${encodeURIComponent(route.username)}`;
     case "game": {
       const qs: string[] = [];

@@ -11,6 +11,7 @@ import { GamePage } from "./pages/GamePage";
 import { SettingsPage, applySettingsOnBoot } from "./pages/SettingsPage";
 import { CustomizePage } from "./pages/CustomizePage";
 import { ArsenalPage } from "./pages/ArsenalPage";
+import { AboutPage } from "./pages/AboutPage";
 import { useAuth } from "./auth/AuthProvider";
 import { useRouter } from "./router";
 import { Sound } from "./game/audio/Sound";
@@ -71,6 +72,7 @@ export function App(): JSX.Element {
     case "settings": page = <SettingsPage navigate={navigate} />; break;
     case "customize": page = <CustomizePage navigate={navigate} />; break;
     case "arsenal": page = <ArsenalPage navigate={navigate} />; break;
+    case "about": page = <AboutPage navigate={navigate} />; break;
     case "profile": page = <ProfilePage username={route.username} navigate={navigate} />; break;
   }
 
