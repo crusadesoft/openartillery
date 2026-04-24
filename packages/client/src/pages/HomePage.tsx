@@ -150,7 +150,11 @@ export function HomePage({ navigate }: Props): JSX.Element {
 
         <div className="ops-card ops-intel">
           <OpsHeader label="06 · Intel Feed" live />
-          <IntelFeed matches={matches} session={session?.user.username ?? null} />
+          <IntelFeed
+            key={session?.user.username ?? "guest"}
+            matches={matches}
+            session={session?.user.username ?? null}
+          />
         </div>
 
         <div className="ops-card ops-engagements">

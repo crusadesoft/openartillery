@@ -85,7 +85,16 @@ function routeToHash(route: Route): string {
 }
 
 export function useRouter(): { route: Route; navigate: (r: Route) => void } {
-  const [route, setRoute] = useState<Route>(() => parseHash(window.location.hash));
+  const [route, setRoute] = useState<Route>(() => {
+    // Deep links: the server always serves index.html for any path (SPA
+    // fallback), so a visitor landing on https://.../play has no hash.
+    // Promote the pathname into the hash route so external links work.
+    if (!window.location.hash && window.location.pathname !== "/") {
+      const promoted = `#${window.location.pathname}${window.location.search}`;
+      window.history.replaceState(null, "", `/${promoted}`);
+    }
+    return parseHash(window.location.hash);
+  });
   useEffect(() => {
     const handler = () => setRoute(parseHash(window.location.hash));
     window.addEventListener("hashchange", handler);

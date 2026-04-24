@@ -35,7 +35,14 @@ export function PlayPage({ navigate }: Props): JSX.Element {
     if (!session) {
       const cleaned = guestName.trim();
       if (!/^[A-Za-z0-9_]{3,16}$/.test(cleaned)) {
-        setError("Guest name must be 3–16 letters, numbers, or underscores.");
+        setError("Set a callsign above before playing (3–16 letters, numbers, or underscores).");
+        // Flash the callsign field into view so users looking at the
+        // invite-code card below understand where to go next.
+        const el = document.querySelector<HTMLInputElement>(
+          'input[placeholder="3–16 characters"]',
+        );
+        el?.focus();
+        el?.scrollIntoView({ block: "center", behavior: "smooth" });
         return;
       }
       localStorage.setItem("artillery:guestName", cleaned);
@@ -163,6 +170,7 @@ export function PlayPage({ navigate }: Props): JSX.Element {
           Create a private lobby and share the six-character code with friends.
           Or paste a code to join a match-in-progress.
         </p>
+        {error && <div className="error" style={{ marginBottom: 12 }}>{error}</div>}
         <div className="row">
           <SfxButton className="secondary-btn" onClick={() => play("private")}>
             Create private
