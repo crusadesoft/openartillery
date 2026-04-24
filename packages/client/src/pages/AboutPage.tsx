@@ -9,17 +9,14 @@ export function AboutPage({ navigate }: Props): JSX.Element {
       <div className="card">
         <h2>About OpenArtillery</h2>
         <p style={{ color: "var(--ink)", fontSize: 14, lineHeight: 1.6 }}>
-          OpenArtillery is a browser-based multiplayer artillery game — turn-based
-          tank combat with destructible terrain, wind, gravity, a growing arsenal
-          of weapons, and bots to practice against. It runs entirely in the
-          browser; no install.
-        </p>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, lineHeight: 1.6, marginTop: 12 }}>
-          Built as an open-source take on the Scorched Earth / Worms formula.
-          The match server is authoritative (no cheating), the physics are
-          hand-rolled (because destructible heightmaps don't fit general
-          engines), and the whole thing is a love letter to the era of
-          friends-passing-the-keyboard artillery games.
+          OpenArtillery is a free multiplayer artillery game that runs in
+          any modern browser. Players take turns aiming and firing tanks
+          across procedurally generated maps with fully destructible terrain,
+          wind, and gravity. Modes include free-for-all, duel, private
+          invite lobbies, and practice matches against AI bots of varying
+          difficulty. Ranked play updates MMR and a public leaderboard.
+          Plays on desktop and mobile. No install, no account required
+          to play against bots.
         </p>
       </div>
 
@@ -37,16 +34,6 @@ export function AboutPage({ navigate }: Props): JSX.Element {
           </a>
           .
         </p>
-      </div>
-
-      <div className="card">
-        <h2>Tech</h2>
-        <ul style={{ color: "var(--ink-dim)", fontSize: 13, lineHeight: 1.8, paddingLeft: 18, margin: 0 }}>
-          <li>Client — React + TypeScript, Phaser 3 for the battle canvas</li>
-          <li>Server — Node + Colyseus for authoritative match state</li>
-          <li>Storage — Postgres (accounts, matches) via Drizzle, Redis for presence</li>
-          <li>Edge — Cloudflare Tunnel in front of a single VPS</li>
-        </ul>
       </div>
 
       <div className="card">
