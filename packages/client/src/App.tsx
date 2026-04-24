@@ -46,9 +46,16 @@ export function App(): JSX.Element {
   }
 
   if (route.name === "game") {
+    // Key on the game route identity so going from one game route to
+    // another (e.g. bots → private) hard-remounts GamePage, tearing down
+    // the old Colyseus room + Phaser scene before rendering the next.
+    // Without this, the old battle UI bleeds through until the new join
+    // finishes because the component stays mounted and the effect
+    // cleanup runs after the render.
+    const gameKey = `${route.mode}:${route.inviteCode ?? ""}:${route.botCount ?? ""}:${route.biome ?? ""}`;
     return (
       <>
-        <GamePage route={route} navigate={navigate} />
+        <GamePage key={gameKey} route={route} navigate={navigate} />
         <MusicPlayer />
       </>
     );
