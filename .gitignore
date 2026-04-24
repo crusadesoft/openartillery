@@ -11,3 +11,4 @@ coverage/
 packages/*/dist/
 packages/*/tsconfig.tsbuildinfo
 .playwright-cli/
+.claude/
