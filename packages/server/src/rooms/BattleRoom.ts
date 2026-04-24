@@ -858,6 +858,24 @@ export class BattleRoom extends Room<BattleState> {
       } else if (this.nextTurnAt === 0 && now >= this.state.turnEndsAt) {
         this.scheduleEndOfTurn();
       }
+      // Safety net: if we've been waiting for projectiles to land for
+      // longer than any shot could reasonably stay in flight, something
+      // jammed — force-clear the world's projectiles and move on rather
+      // than leave the match frozen for every player.
+      if (
+        this.nextTurnAt === -1 &&
+        now > this.state.turnEndsAt + 20_000
+      ) {
+        logger.warn(
+          {
+            turnId: this.state.currentTurnId,
+            stuckForMs: now - this.state.turnEndsAt,
+          },
+          "force-advancing stuck turn; clearing projectiles",
+        );
+        this.world.clearProjectiles();
+        this.nextTurnAt = now + TURN.BETWEEN_TURNS_MS;
+      }
     }
   }
 

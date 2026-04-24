@@ -457,4 +457,13 @@ export class World {
   hasLiveProjectiles(): boolean {
     return this.projectiles.size > 0;
   }
+
+  /** Force-clear any projectiles still in flight. Used as a safety net
+   *  when a turn has been stuck past its timeout — better to advance
+   *  than to let the match freeze. */
+  clearProjectiles(): void {
+    for (const id of Array.from(this.projectiles.keys())) {
+      this.removeProjectile(id);
+    }
+  }
 }
