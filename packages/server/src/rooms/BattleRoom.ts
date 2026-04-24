@@ -7,15 +7,12 @@ import {
   BOT_DIFFICULTY_SPECS,
   type BotDifficulty,
   CHAT_RATE_LIMIT,
-  ClientMessageSchema,
   DEFAULT_LOADOUT,
   DEFAULT_MMR,
-  MESSAGE_RATE_LIMIT,
   MODES,
   NETWORK,
   Player,
   RECONNECT_GRACE_MS,
-  ROOM_OPTIONS_KEYS,
   type GameMode,
   type RoomJoinOptions,
   TANK,
@@ -31,81 +28,19 @@ import { BotBrain } from "./Bot.js";
 import { logger } from "../logger.js";
 import { matchesFinished, matchesStarted } from "../metrics.js";
 import { persistMatch } from "../match/persist.js";
-import { verifyAccessToken } from "../auth/jwt.js";
-import { db, schema } from "../db/index.js";
-import { eq } from "drizzle-orm";
-
-const TANK_COLORS = [
-  0xff5e5e, 0x5ecfff, 0x8aff5e, 0xffd25e, 0xcf5eff, 0xff9d5e,
-  0x5efff6, 0xff5ec8,
-];
-
-const BOT_NAMES = [
-  "Targa",
-  "Rico",
-  "Vesper",
-  "Nimbus",
-  "Halcyon",
-  "Onyx",
-  "Zenith",
-  "Archer",
-  "Brisk",
-  "Muse",
-];
-
-/** Bot trash-talk. `$0` is replaced with the first positional argument
- *  (killer/victim name) when present. */
-const BOT_LINES = {
-  on_fire: [
-    "Eat this.",
-    "Range me on three.",
-    "Adjusting — dead wrong, dead man.",
-    "Wind's with me.",
-    "Sending mail.",
-    "Round out.",
-    "Hope you packed a helmet.",
-    "This one's got your name on it.",
-    "Steady… and release.",
-    "Light 'em up.",
-  ],
-  on_kill: [
-    "Scratch one, $0.",
-    "Don't blink next time, $0.",
-    "Was that it?",
-    "Tag them and bag them.",
-    "Nap time, $0.",
-    "You fire that thing backwards?",
-    "Rookie numbers.",
-    "Go cry about it.",
-    "Thanks for the kill streak.",
-    "GG ez.",
-  ],
-  on_death: [
-    "Lucky shot, $0.",
-    "I'll be back. With interest.",
-    "Nice one. For a cheater.",
-    "Reviewing the tape.",
-    "You'll pay for that.",
-    "Cheese strats.",
-    "Mark that down — won't happen twice.",
-    "Tell my hull I loved her.",
-  ],
-  on_hit: [
-    "Barely felt it.",
-    "Is that the best you got?",
-    "Closer. Try again.",
-    "Keep firing, champ.",
-    "Scratched the paint.",
-    "My gunner's laughing.",
-  ],
-} as const;
-
-function pick(lines: readonly string[], args: string[] = []): string {
-  const line = lines[Math.floor(Math.random() * lines.length)]!;
-  return args.length > 0
-    ? line.replace(/\$(\d)/g, (_, i) => args[Number(i)] ?? "")
-    : line;
-}
+import {
+  BOT_NAMES,
+  TANK_COLORS,
+  clamp,
+  generateInviteCode,
+  rateAllow,
+  resolveIdentity,
+  rollWind,
+  sanitizeLobbyName,
+  shuffle,
+} from "./battleRoomUtils.js";
+import { BOT_LINES, pick } from "./botDialogue.js";
+import { dispatchClientMessage, type MessageHandlers } from "./MessageDispatcher.js";
 
 interface SessionMeta {
   input: PlayerInput;
@@ -221,9 +156,11 @@ export class BattleRoom extends Room<BattleState> {
       }
     }
 
-    this.onMessage("*", (client, kind, payload) =>
-      this.handleMessage(client, kind, payload),
-    );
+    this.onMessage("*", (client, kind, payload) => {
+      const meta = this.sessions.get(client.sessionId);
+      if (!meta) return;
+      dispatchClientMessage(this as unknown as MessageHandlers, client, kind, payload, meta);
+    });
 
     this.simInterval = setInterval(() => this.tick(), 1000 / NETWORK.TICK_HZ);
     this.simInterval.unref?.();
@@ -360,79 +297,7 @@ export class BattleRoom extends Room<BattleState> {
     }
   }
 
-  private handleMessage(
-    client: Client,
-    kind: string | number,
-    payload: unknown,
-  ): void {
-    const meta = this.sessions.get(client.sessionId);
-    if (!meta) return;
-    if (
-      !rateAllow(
-        meta.messages,
-        MESSAGE_RATE_LIMIT.COUNT,
-        MESSAGE_RATE_LIMIT.WINDOW_MS,
-      )
-    ) {
-      return;
-    }
-    const result = ClientMessageSchema.safeParse({
-      type: kind,
-      ...(payload as object),
-    });
-    if (!result.success) {
-      logger.debug({ kind, err: result.error.issues }, "dropped invalid message");
-      return;
-    }
-    const msg = result.data;
-    switch (msg.type) {
-      case "input":
-        this.handleInput(client, msg);
-        break;
-      case "selectWeapon":
-        this.handleSelectWeapon(client, msg.weapon);
-        break;
-      case "aim":
-        this.handleAim(client, msg.angle, msg.power, msg.facing);
-        break;
-      case "fire":
-        this.handleFireNow(client);
-        break;
-      case "charge":
-        this.handleCharge(client, msg.charging);
-        break;
-      case "ready":
-        this.handleReady(client, msg.ready);
-        break;
-      case "chat":
-        this.handleChat(client, meta, msg.text);
-        break;
-      case "rematch":
-        this.handleRematch(client);
-        break;
-      case "addBot":
-        this.handleAddBot(client, msg.difficulty as BotDifficulty | undefined);
-        break;
-      case "removeBot":
-        this.handleRemoveBot(client, msg.sessionId);
-        break;
-      case "setBotDifficulty":
-        this.handleSetBotDifficulty(
-          client,
-          msg.sessionId,
-          msg.difficulty as BotDifficulty,
-        );
-        break;
-      case "setMatchSettings":
-        this.handleSetMatchSettings(client, msg);
-        break;
-      case "setLobbyConfig":
-        this.handleSetLobbyConfig(client, msg);
-        break;
-    }
-  }
-
-  private handleSetBotDifficulty(
+  handleSetBotDifficulty(
     client: Client,
     sessionId: string,
     difficulty: BotDifficulty,
@@ -451,7 +316,7 @@ export class BattleRoom extends Room<BattleState> {
     void client;
   }
 
-  private handleRemoveBot(client: Client, sessionId: string): void {
+  handleRemoveBot(client: Client, sessionId: string): void {
     if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
     if (client.sessionId !== this.state.hostSessionId) return;
@@ -508,7 +373,7 @@ export class BattleRoom extends Room<BattleState> {
     });
   }
 
-  private handleSetLobbyConfig(
+  handleSetLobbyConfig(
     client: Client,
     msg: {
       lobbyName?: string;
@@ -560,7 +425,7 @@ export class BattleRoom extends Room<BattleState> {
     void terrainDirty;
   }
 
-  private handleSetMatchSettings(
+  handleSetMatchSettings(
     client: Client,
     msg: {
       turnDurationSec?: number;
@@ -588,7 +453,7 @@ export class BattleRoom extends Room<BattleState> {
     void client;
   }
 
-  private handleAim(
+  handleAim(
     client: Client,
     angle: number,
     power: number,
@@ -604,7 +469,7 @@ export class BattleRoom extends Room<BattleState> {
     p.charging = false;
   }
 
-  private handleFireNow(client: Client): void {
+  handleFireNow(client: Client): void {
     if (this.state.currentTurnId !== client.sessionId) return;
     if (this.turnFired) return;
     if (this.world.hasLiveProjectiles()) return;
@@ -614,7 +479,7 @@ export class BattleRoom extends Room<BattleState> {
     this.fireCurrent(p);
   }
 
-  private handleInput(
+  handleInput(
     client: Client,
     msg: { left: boolean; right: boolean; up: boolean; down: boolean },
   ): void {
@@ -627,7 +492,7 @@ export class BattleRoom extends Room<BattleState> {
     meta.input = { left: msg.left, right: msg.right, up: msg.up, down: msg.down };
   }
 
-  private handleSelectWeapon(client: Client, weapon: string): void {
+  handleSelectWeapon(client: Client, weapon: string): void {
     if (!(weapon in WEAPONS)) return;
     if (this.state.currentTurnId !== client.sessionId) return;
     const p = this.state.players.get(client.sessionId);
@@ -643,7 +508,7 @@ export class BattleRoom extends Room<BattleState> {
     this.logEvent({ kind: "weapon", id: p.id, weapon });
   }
 
-  private handleCharge(client: Client, charging: boolean): void {
+  handleCharge(client: Client, charging: boolean): void {
     if (this.state.currentTurnId !== client.sessionId) return;
     if (this.turnFired) return;
     const p = this.state.players.get(client.sessionId);
@@ -702,14 +567,14 @@ export class BattleRoom extends Room<BattleState> {
     this.scheduleEndOfTurn();
   }
 
-  private handleReady(client: Client, ready: boolean): void {
+  handleReady(client: Client, ready: boolean): void {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     p.ready = ready;
     if (this.state.phase === "waiting") this.maybeStartCountdown();
   }
 
-  private handleChat(
+  handleChat(
     client: Client,
     meta: SessionMeta,
     text: string,
@@ -726,7 +591,7 @@ export class BattleRoom extends Room<BattleState> {
     });
   }
 
-  private handleRematch(client: Client): void {
+  handleRematch(client: Client): void {
     if (this.state.phase !== "ended") return;
     this.rematchVotes.add(client.sessionId);
     const humans = Array.from(this.state.players.values()).filter(
@@ -744,7 +609,7 @@ export class BattleRoom extends Room<BattleState> {
     }
   }
 
-  private handleAddBot(client: Client, difficulty?: BotDifficulty): void {
+  handleAddBot(client: Client, difficulty?: BotDifficulty): void {
     // Casual lobbies only; ranked queues fill themselves via Matchmaking.ts.
     if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
@@ -1163,61 +1028,3 @@ export class BattleRoom extends Room<BattleState> {
   }
 }
 
-function rollWind(maxWind: number = WORLD.MAX_WIND): number {
-  return (Math.random() * 2 - 1) * maxWind;
-}
-
-function rateAllow(bucket: number[], count: number, windowMs: number): boolean {
-  const now = Date.now();
-  while (bucket.length && now - bucket[0]! > windowMs) bucket.shift();
-  if (bucket.length >= count) return false;
-  bucket.push(now);
-  return true;
-}
-
-function shuffle<T>(arr: T[]): void {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j]!, arr[i]!];
-  }
-}
-
-function clamp(v: number, lo: number, hi: number): number {
-  return Math.min(hi, Math.max(lo, v));
-}
-
-function generateInviteCode(): string {
-  const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  let out = "";
-  for (let i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
-  return out;
-}
-
-function sanitizeLobbyName(raw: unknown, fallbackOwner: unknown): string {
-  const s = typeof raw === "string" ? raw.trim().slice(0, 32) : "";
-  if (s) return s;
-  const owner = typeof fallbackOwner === "string" ? fallbackOwner.trim().slice(0, 16) : "";
-  return owner ? `${owner}'s lobby` : "Lobby";
-}
-
-async function resolveIdentity(
-  options: RoomJoinOptions,
-): Promise<{
-  userId: string;
-  username: string;
-  mmr: number;
-  loadout?: RoomJoinOptions["loadout"];
-} | null> {
-  const token = options[ROOM_OPTIONS_KEYS.ACCESS_TOKEN as "accessToken"];
-  if (!token) return null;
-  try {
-    const claims = await verifyAccessToken(token);
-    const row = await db.query.users.findFirst({
-      where: eq(schema.users.id, claims.sub),
-    });
-    if (!row) return null;
-    return { userId: row.id, username: row.username, mmr: row.mmr };
-  } catch {
-    return null;
-  }
-}

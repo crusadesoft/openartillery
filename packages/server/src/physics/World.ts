@@ -14,6 +14,7 @@ import {
   createProjectile,
   stepProjectiles,
 } from "./Projectile.js";
+import { applyBlastDamage, pruneFires, tickFires } from "./DamageResolver.js";
 
 export interface Input {
   left: boolean;
@@ -202,15 +203,14 @@ export class World {
   }
 
   step(dt: number): StepTelemetry {
-    this.pruneFires(Date.now());
+    pruneFires(this.state, Date.now());
     const explosions: ExplosionEvent[] = [];
     const damages: DamageRecord[] = [];
     const deaths: string[] = [];
 
     // Apply napalm damage over time.
-    const firesTick = this.state.fires.size;
-    if (firesTick > 0) {
-      this.tickFires(dt, damages, deaths);
+    if (this.state.fires.size > 0) {
+      tickFires(this.state, (x) => this.terrain.heightAt(x), dt, damages, deaths);
     }
 
     if (this.projectiles.size > 0) {
@@ -297,7 +297,7 @@ export class World {
       this.terrain.explode(x, y, def.radius * def.digFactor);
     }
 
-    this.applyBlastDamage(body, x, y, def.radius, def.damage, out);
+    applyBlastDamage(this.state, body, x, y, def.radius, def.damage, out);
 
     out.explosions.push({
       x,
@@ -355,98 +355,6 @@ export class World {
         this.state.fires.set(id, tile);
       }
     }
-  }
-
-  private applyBlastDamage(
-    body: ProjectileBody,
-    x: number,
-    y: number,
-    radius: number,
-    baseDmg: number,
-    out: StepTelemetry,
-  ): void {
-    const owner = this.state.players.get(body.state.ownerId);
-    this.state.players.forEach((p) => {
-      if (p.dead) return;
-      const dx = p.x - x;
-      const dy = p.y - y;
-      const dist = Math.hypot(dx, dy);
-      const effective = radius + TANK.WIDTH / 2;
-      if (dist < effective) {
-        const falloff = Math.max(0, 1 - dist / effective);
-        const dmg = Math.round(baseDmg * falloff);
-        if (dmg <= 0) return;
-        const applied = Math.min(p.hp, dmg);
-        p.hp = Math.max(0, p.hp - dmg);
-        if (owner && owner.id !== p.id) owner.damageDealt += applied;
-        const knock = falloff * 14;
-        p.x = Math.max(
-          10,
-          Math.min(WORLD.WIDTH - 10, p.x + Math.sign(dx || 1) * knock),
-        );
-        const killed = p.hp <= 0;
-        if (killed) {
-          p.dead = true;
-          p.deaths += 1;
-          out.deaths.push(p.id);
-          if (owner && owner.id !== p.id) owner.kills += 1;
-        }
-        out.damages.push({
-          tankId: p.id,
-          ownerId: body.state.ownerId,
-          weapon: body.weapon,
-          amount: applied,
-          x: p.x,
-          y: p.y - TANK.HEIGHT / 2,
-          killed,
-        });
-      }
-    });
-  }
-
-  private tickFires(dt: number, damages: DamageRecord[], deaths: string[]): void {
-    this.state.fires.forEach((tile) => {
-      // Ensure the tile hugs terrain as it changes.
-      tile.y = this.terrain.heightAt(tile.x) - 10;
-      this.state.players.forEach((p) => {
-        if (p.dead) return;
-        const dx = p.x - tile.x;
-        const dy = p.y - tile.y;
-        if (Math.hypot(dx, dy) < tile.radius + TANK.WIDTH / 2) {
-          const def = WEAPONS.napalm;
-          const dps = def.napalm?.damagePerSec ?? 10;
-          const dmg = Math.max(1, Math.round(dps * dt));
-          const applied = Math.min(p.hp, dmg);
-          p.hp = Math.max(0, p.hp - dmg);
-          const owner = this.state.players.get(tile.ownerId);
-          if (owner && owner.id !== p.id) owner.damageDealt += applied;
-          const killed = p.hp <= 0;
-          if (killed) {
-            p.dead = true;
-            p.deaths += 1;
-            deaths.push(p.id);
-            if (owner && owner.id !== p.id) owner.kills += 1;
-          }
-          damages.push({
-            tankId: p.id,
-            ownerId: tile.ownerId,
-            weapon: "napalm",
-            amount: applied,
-            x: p.x,
-            y: p.y - TANK.HEIGHT / 2,
-            killed,
-          });
-        }
-      });
-    });
-  }
-
-  private pruneFires(now: number): void {
-    const expired: string[] = [];
-    this.state.fires.forEach((f, key) => {
-      if (f.expiresAt <= now) expired.push(key);
-    });
-    for (const k of expired) this.state.fires.delete(k);
   }
 
   private removeProjectile(id: string): void {

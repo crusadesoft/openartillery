@@ -1,4 +1,5 @@
 export * from "./constants.js";
+export * from "./weapon-types.js";
 export * from "./weapons.js";
 export * from "./messages.js";
 export * from "./schema.js";
