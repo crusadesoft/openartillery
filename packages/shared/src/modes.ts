@@ -1,4 +1,4 @@
-export type GameMode = "ffa" | "duel" | "private" | "bots";
+export type GameMode = "ffa" | "duel" | "private" | "bots" | "custom";
 export type BotDifficulty = "easy" | "normal" | "hard" | "nightmare";
 
 export interface ModeSpec {
@@ -53,9 +53,18 @@ export const MODES: Record<GameMode, ModeSpec> = {
     ranked: false,
     preloadedBots: 2,
   },
+  custom: {
+    id: "custom",
+    label: "Custom Lobby",
+    description: "Public custom lobby. Host picks the rules.",
+    minPlayers: 2,
+    maxPlayers: 8,
+    botFillAfterMs: 0,
+    ranked: false,
+  },
 };
 
-export const ALL_MODES: GameMode[] = ["ffa", "duel", "bots", "private"];
+export const ALL_MODES: GameMode[] = ["ffa", "duel", "bots", "private", "custom"];
 
 export const BOT_DIFFICULTIES: BotDifficulty[] = ["easy", "normal", "hard", "nightmare"];
 

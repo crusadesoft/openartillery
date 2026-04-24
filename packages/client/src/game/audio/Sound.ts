@@ -98,6 +98,7 @@ class SoundManager {
    *  level the player had before. */
   private muted = { master: false, music: false, sfx: false, ui: false };
   private mutedListeners = new Set<() => void>();
+  private static readonly MUTES_KEY = "artillery:audio-mutes:v1";
 
   /** Browsers block <audio>/AudioContext until a user gesture. If playMusic
    * is called before any gesture happens, we stash the intent and fire it
@@ -148,8 +149,29 @@ class SoundManager {
    *  un-muting restores the exact level the player had before. */
   toggleMuted(c: "master" | "music" | "sfx" | "ui"): void {
     this.muted[c] = !this.muted[c];
+    this.persistMutes();
     this.applyMusicVolume();
     for (const cb of this.mutedListeners) cb();
+  }
+
+  /** Restore mute flags from localStorage. Called once at boot. */
+  loadPersistedMutes(): void {
+    try {
+      const raw = localStorage.getItem(SoundManager.MUTES_KEY);
+      if (!raw) return;
+      const parsed = JSON.parse(raw) as Partial<typeof this.muted>;
+      for (const k of ["master", "music", "sfx", "ui"] as const) {
+        if (typeof parsed[k] === "boolean") this.muted[k] = parsed[k] as boolean;
+      }
+      this.applyMusicVolume();
+      for (const cb of this.mutedListeners) cb();
+    } catch { /* ignore */ }
+  }
+
+  private persistMutes(): void {
+    try {
+      localStorage.setItem(SoundManager.MUTES_KEY, JSON.stringify(this.muted));
+    } catch { /* ignore */ }
   }
 
   /** Subscribe to mute-state changes (UI re-render). */

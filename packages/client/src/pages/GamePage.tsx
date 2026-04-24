@@ -29,13 +29,29 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
         localStorage.getItem("artillery:guestName") ??
         `Guest${Math.floor(Math.random() * 1000)}`;
       try {
+        // PlayPage stashes a password for invite-code joins here so it
+        // doesn't have to ride the URL. Read + clear so a stray reload
+        // doesn't carry a stale secret into the next attempt.
+        const stashedPassword = sessionStorage.getItem("artillery:joinPassword") ?? undefined;
+        if (stashedPassword) sessionStorage.removeItem("artillery:joinPassword");
+
         const room = await joinBattle({
           mode: route.mode,
           username,
+          roomId: route.roomId,
           inviteCode: route.inviteCode,
           botCount: route.botCount,
           botDifficulty: route.botDifficulty,
           biome: route.biome,
+          create: route.create,
+          password: stashedPassword,
+          ...(route.create
+            ? {
+                visibility: "public" as const,
+                maxPlayers: 6,
+                lobbyName: `${username}'s lobby`,
+              }
+            : {}),
         });
         await waitForFirstState(room);
         if (signal.aborted) {
@@ -45,6 +61,13 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
         }
         roomRef.current = room;
         setState({ kind: "game", room });
+        // Normalize the URL to roomId so a reload or share-link doesn't
+        // spawn a second lobby. The hashchange handler re-parses the
+        // route, so use history.replaceState directly to avoid the
+        // round-trip that would re-run the connect effect.
+        if (route.create) {
+          window.history.replaceState(null, "", `#/game/room/${encodeURIComponent(room.roomId)}`);
+        }
       } catch (err) {
         if (signal.aborted) return;
         setState({ kind: "error", message: friendlyJoinError(err) });
@@ -52,10 +75,12 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
     },
     [
       route.mode,
+      route.roomId,
       route.inviteCode,
       route.botCount,
       route.botDifficulty,
       route.biome,
+      route.create,
       session,
     ],
   );

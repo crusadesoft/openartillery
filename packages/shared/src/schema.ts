@@ -71,6 +71,15 @@ export class BattleState extends Schema {
   @type("string") mode = "ffa";
   @type("string") biome = "grasslands";
   @type("string") inviteCode = ""; // only set for private rooms
+  @type("string") lobbyName = "";
+  @type("string") visibility = "public"; // "public" | "private"
+  @type("boolean") ranked = false;
+  @type("string") hostSessionId = "";
+  @type("number") maxPlayers = 6;
+  /** True until match start: biome is a mystery that re-rolls when the match begins. */
+  @type("boolean") biomeRandom = false;
+  /** Host set a password on the room; joiners must supply it. */
+  @type("boolean") hasPassword = false;
   @type({ map: Player }) players = new MapSchema<Player>();
   @type({ map: Projectile }) projectiles = new MapSchema<Projectile>();
   @type({ map: FireTile }) fires = new MapSchema<FireTile>();

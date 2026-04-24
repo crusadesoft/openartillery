@@ -20,6 +20,14 @@ export interface RoomJoinOptions {
   botCount?: number;
   botDifficulty?: string;
   biome?: string;
+  /** Only read on create: caps the lobby size for custom / private / bots. */
+  maxPlayers?: number;
+  /** Only read on create: host-supplied lobby name for the browser. */
+  lobbyName?: string;
+  /** Only read on create: whether the lobby is listed publicly. */
+  visibility?: "public" | "private";
+  /** Optional password for private rooms; required on join if host set one. */
+  password?: string;
   loadout?: {
     body: string;
     turret: string;

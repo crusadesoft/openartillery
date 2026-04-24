@@ -61,6 +61,10 @@ export function saveSettings(s: StoredSettings): void {
 
 export function applySettingsOnBoot(): void {
   saveSettings(loadSettings());
+  // Mute flags live in their own storage key (toggled by the MusicPlayer
+  // UI outside of this settings flow). Restore them so a page refresh
+  // doesn't un-mute the user.
+  Sound.loadPersistedMutes();
 }
 
 export function SettingsPage({ navigate }: Props): JSX.Element {

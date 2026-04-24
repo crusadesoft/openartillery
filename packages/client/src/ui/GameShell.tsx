@@ -36,14 +36,16 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
   const phaserRef = useRef<PhaserGame | null>(null);
   const chatIdRef = useRef(0);
 
+  const phaserActive = phase === "playing" || phase === "ended";
   useEffect(() => {
+    if (!phaserActive) return;
     if (!phaserHostRef.current || phaserRef.current) return;
     phaserRef.current = new PhaserGame(phaserHostRef.current, room);
     return () => {
       phaserRef.current?.destroy();
       phaserRef.current = null;
     };
-  }, [room]);
+  }, [room, phaserActive]);
 
   // Ref-guarded so React StrictMode's double-mount doesn't double-register
   // the event listener (which was causing chat messages to appear twice).
@@ -113,19 +115,27 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
   const hasFlight = room.state.projectiles.size > 0;
   const selfPower = self?.power ?? 0;
 
+  const inLobby = phase === "waiting" || phase === "countdown";
+
   return (
     <div className="game-wrapper">
-      <div id="phaser-host" ref={phaserHostRef} />
+      {phaserActive && <div id="phaser-host" ref={phaserHostRef} />}
 
-      {(phase === "waiting" || phase === "countdown") && (
+      {inLobby && (
         <Lobby
           players={players}
           selfId={room.sessionId}
+          hostId={room.state.hostSessionId}
           phase={phase}
           mode={MODES[mode]?.label ?? mode}
           rawMode={mode}
           biome={room.state.biome}
+          biomeRandom={room.state.biomeRandom}
           minPlayers={minPlayers}
+          maxPlayers={room.state.maxPlayers || MODES[mode]?.maxPlayers || 6}
+          lobbyName={room.state.lobbyName}
+          visibility={room.state.visibility || "public"}
+          hasPassword={room.state.hasPassword}
           inviteCode={room.state.inviteCode}
           startsInMs={Math.max(0, room.state.roundStartsAt - Date.now())}
           turnDurationSec={room.state.turnDurationSec || 30}
@@ -139,6 +149,9 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
             room.send("setBotDifficulty", { sessionId, difficulty })
           }
           onSettings={(patch) => room.send("setMatchSettings", patch)}
+          onLobbyConfig={(patch) => room.send("setLobbyConfig", patch)}
+          chatEntries={chat}
+          onChat={sendChat}
           onLeave={onLeave}
         />
       )}
@@ -181,7 +194,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
         <MatchEndOverlay room={room} onLeave={onLeave} />
       )}
 
-      <ChatPanel entries={chat} onSend={sendChat} />
+      {!inLobby && <ChatPanel entries={chat} onSend={sendChat} />}
       <PauseMenu onLeave={onLeave} />
     </div>
   );

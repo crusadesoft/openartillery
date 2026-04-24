@@ -40,14 +40,25 @@ function randomInviteCode(): string {
   return code;
 }
 
-export async function joinBattle(opts: {
+export interface JoinBattleOptions {
   mode: string;
   username: string;
+  /** Join a specific room by ID (lobby browser). */
+  roomId?: string;
+  /** Invite-code join for private lobbies. */
   inviteCode?: string;
+  /** Force creation of a new room (Create Lobby form). */
+  create?: boolean;
   botCount?: number;
   botDifficulty?: string;
   biome?: string;
-}): Promise<Room<BattleState>> {
+  maxPlayers?: number;
+  visibility?: "public" | "private";
+  lobbyName?: string;
+  password?: string;
+}
+
+export async function joinBattle(opts: JoinBattleOptions): Promise<Room<BattleState>> {
   const c = getClient();
   const session = authStorage.load();
   const loadout = loadLoadout();
@@ -59,6 +70,9 @@ export async function joinBattle(opts: {
     ...(opts.botCount != null ? { botCount: opts.botCount } : {}),
     ...(opts.botDifficulty ? { botDifficulty: opts.botDifficulty } : {}),
     ...(opts.biome ? { biome: opts.biome } : {}),
+    ...(opts.maxPlayers ? { maxPlayers: opts.maxPlayers } : {}),
+    ...(opts.lobbyName ? { lobbyName: opts.lobbyName } : {}),
+    ...(opts.password ? { password: opts.password } : {}),
     ...(session ? { accessToken: session.tokens.accessToken } : {}),
   };
 
@@ -74,39 +88,53 @@ export async function joinBattle(opts: {
   }
 
   let room: Room<BattleState>;
-  if (opts.inviteCode) {
-    // Colyseus matchmaker filters rooms by `mode` + `inviteCode`
-    // (see server/src/index.ts `filterBy(["mode","inviteCode"])`), so
-    // `join` will locate the host's existing private room. If no room
-    // matches we throw a clearer error than the server's default so
-    // the UI can show "Invalid invite code" instead of a raw matchmake
-    // message.
+  if (opts.roomId) {
+    try {
+      room = await c.joinById<BattleState>(opts.roomId, joinOptions);
+    } catch (err) {
+      const msg = (err as { message?: string })?.message ?? String(err);
+      if (/password/i.test(msg)) {
+        throw new Error("This lobby is password-protected. Enter the password and try again.");
+      }
+      if (/no rooms/i.test(msg) || /locked/i.test(msg) || /full/i.test(msg)) {
+        throw new Error("That lobby is no longer available.");
+      }
+      throw err;
+    }
+  } else if (opts.inviteCode) {
+    // Casual lobbies are all created with mode "custom" and an invite code,
+    // so the matchmaker's `filterBy(["mode","inviteCode"])` matches on the
+    // code alone. See server/src/index.ts.
     try {
       room = await c.join<BattleState>("battle", {
         ...joinOptions,
-        mode: "private",
+        mode: "custom",
       });
     } catch (err) {
       const msg = (err as { message?: string })?.message ?? String(err);
+      if (/password/i.test(msg)) {
+        throw new Error("This lobby is password-protected. Enter the password and try again.");
+      }
       if (/no rooms/i.test(msg) || /matchmake/i.test(msg)) {
         throw new Error(`No match found for invite code "${opts.inviteCode}"`);
       }
       throw err;
     }
-  } else if (opts.mode === "private") {
-    // Generate the invite code client-side and pass it through `create`
-    // options so the matchmaker's `filterBy(["mode","inviteCode"])`
-    // indexes this room by that exact code. Without this, filterBy
-    // sees `inviteCode: undefined` and no guest can ever find us.
-    const generatedCode = randomInviteCode();
+  } else if (opts.create || opts.mode === "private" || opts.mode === "custom" || opts.mode === "bots") {
+    // Every casual lobby (public or private) gets an invite code so the
+    // matchmaker's `filterBy(["mode","inviteCode"])` can index it for
+    // later invite-based joins. Generating client-side lets us navigate
+    // to the room before the server responds and keeps filterBy honest.
+    const inviteCode = randomInviteCode();
     room = await c.create<BattleState>("battle", {
       ...joinOptions,
-      inviteCode: generatedCode,
+      mode: "custom",
+      inviteCode,
+      ...(opts.visibility ? { visibility: opts.visibility } : {}),
     });
-  } else if (opts.mode === "bots") {
-    // Always a fresh room — no matchmaking join.
-    room = await c.create<BattleState>("battle", joinOptions);
   } else {
+    // Ranked (ffa / duel) quick-play — matches any open ranked room of the
+    // same mode, creates a new one otherwise.
     room = await c.joinOrCreate<BattleState>("battle", joinOptions);
   }
 

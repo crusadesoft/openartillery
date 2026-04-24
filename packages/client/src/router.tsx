@@ -14,10 +14,13 @@ export type Route =
   | {
       name: "game";
       mode: string;
+      roomId?: string;
       inviteCode?: string;
       botCount?: number;
       botDifficulty?: string;
       biome?: string;
+      /** True means "create a brand new lobby with defaults". */
+      create?: boolean;
     };
 
 function parseHash(hash: string): Route {
@@ -46,7 +49,15 @@ function parseHash(hash: string): Route {
     case "profile":
       return { name: "profile", username: parts[1] ?? "" };
     case "game": {
-      const mode = parts[1] ?? "ffa";
+      const sub = parts[1] ?? "ffa";
+      if (sub === "new") {
+        return { name: "game", mode: "custom", create: true };
+      }
+      if (sub === "room") {
+        const roomId = parts[2] ?? "";
+        return { name: "game", mode: "custom", roomId };
+      }
+      const mode = sub;
       const code = params.get("code") ?? undefined;
       const bots = params.get("bots");
       const diff = params.get("diff") ?? undefined;
@@ -78,6 +89,8 @@ function routeToHash(route: Route): string {
     case "about": return "#/about";
     case "profile": return `#/profile/${encodeURIComponent(route.username)}`;
     case "game": {
+      if (route.create) return `#/game/new`;
+      if (route.roomId) return `#/game/room/${encodeURIComponent(route.roomId)}`;
       const qs: string[] = [];
       if (route.inviteCode) qs.push(`code=${encodeURIComponent(route.inviteCode)}`);
       if (route.botCount) qs.push(`bots=${route.botCount}`);

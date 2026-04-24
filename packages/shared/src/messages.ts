@@ -19,6 +19,14 @@ export type ClientMessage =
       fuelPerTurn?: number;
       startingHp?: number;
       maxWind?: number;
+    }
+  | {
+      type: "setLobbyConfig";
+      lobbyName?: string;
+      maxPlayers?: number;
+      biome?: string;
+      visibility?: "public" | "private";
+      password?: string;
     };
 
 /** Server → client one-off events (layered on top of schema patches). */

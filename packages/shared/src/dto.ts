@@ -57,6 +57,20 @@ export interface LeaderboardEntry {
   matches: number;
 }
 
+export interface LobbySummary {
+  roomId: string;
+  lobbyName: string;
+  hostName: string;
+  mode: string;
+  biome: string;
+  maxPlayers: number;
+  currentPlayers: number;
+  visibility: "public" | "private";
+  ranked: boolean;
+  hasBots: boolean;
+  createdAt: number;
+}
+
 export interface MatchSummary {
   id: string;
   mode: string;
@@ -142,6 +156,16 @@ export const SetMatchSettingsMessage = z.object({
   maxWind: z.number().min(0).max(80).optional(),
 });
 
+export const SetLobbyConfigMessage = z.object({
+  type: z.literal("setLobbyConfig"),
+  lobbyName: z.string().max(32).optional(),
+  maxPlayers: z.number().int().min(2).max(8).optional(),
+  biome: z.string().min(1).max(24).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
+  /** "" clears the password; otherwise up to 64 chars. */
+  password: z.string().max(64).optional(),
+});
+
 export const ClientMessageSchema = z.discriminatedUnion("type", [
   InputMessage,
   SelectWeaponMessage,
@@ -155,6 +179,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   RemoveBotMessage,
   SetBotDifficultyMessage,
   SetMatchSettingsMessage,
+  SetLobbyConfigMessage,
 ]);
 
 export type ValidatedClientMessage = z.infer<typeof ClientMessageSchema>;

@@ -111,4 +111,9 @@ export const api = {
       `/api/matches/recent?limit=${limit}`,
     );
   },
+  rooms() {
+    return request<{ lobbies: import("@artillery/shared").LobbySummary[] }>(
+      `/api/rooms`,
+    );
+  },
 };

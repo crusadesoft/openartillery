@@ -1,13 +1,56 @@
 import { Router } from "express";
+import { matchMaker } from "@colyseus/core";
 import { desc, eq, sql } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { apiLimiter } from "../middleware/rateLimit.js";
 import { optionalAuth, requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler, HttpError } from "../middleware/error.js";
-import type { LeaderboardEntry, MatchSummary, PublicProfile } from "@artillery/shared";
+import type {
+  LeaderboardEntry,
+  LobbySummary,
+  MatchSummary,
+  PublicProfile,
+} from "@artillery/shared";
 
 export const apiRouter = Router();
 apiRouter.use(apiLimiter);
+
+apiRouter.get(
+  "/rooms",
+  asyncHandler(async (_req, res) => {
+    const rooms = await matchMaker.query({ name: "battle" });
+    const lobbies: LobbySummary[] = rooms
+      .filter((r) => {
+        const m = r.metadata ?? {};
+        // Any casual lobby (public or private) while still in the pre-match
+        // phase. Private ones surface so players can see activity; they just
+        // aren't joinable without the code. Started/in-progress matches are
+        // hidden — they don't accept new joiners anyway.
+        const visibility = m.visibility === "private" ? "private" : "public";
+        const isCasual = !m.ranked && m.started !== true;
+        return isCasual && (visibility === "public" || visibility === "private");
+      })
+      .map((r) => {
+        const m = r.metadata ?? {};
+        const visibility: "public" | "private" =
+          m.visibility === "private" ? "private" : "public";
+        return {
+          roomId: r.roomId,
+          lobbyName: String(m.lobbyName ?? "Lobby"),
+          hostName: String(m.hostName ?? ""),
+          mode: String(m.mode ?? "custom"),
+          biome: String(m.biome ?? ""),
+          maxPlayers: Number(r.maxClients ?? 6),
+          currentPlayers: Number(r.clients ?? 0),
+          visibility,
+          ranked: Boolean(m.ranked),
+          hasBots: false,
+          createdAt: new Date(r.createdAt).getTime(),
+        } satisfies LobbySummary;
+      });
+    res.json({ lobbies });
+  }),
+);
 
 apiRouter.get(
   "/leaderboard",

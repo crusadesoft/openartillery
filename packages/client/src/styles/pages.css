@@ -822,6 +822,12 @@ html.mp-docked .weapon-tray { bottom: 68px; }
 html.mp-docked .fire-btn { bottom: 170px; }
 html.mp-docked .chat-panel { bottom: 68px; }
 html.mp-docked .hud-overlay-bottom { bottom: 68px; }
+html.mp-docked .minimap { bottom: 68px; }
+html.mp-docked .mobile-drive { bottom: 172px; }
+/* Pre-match lobby: keep the footer action bar above the dock bar so
+   Ready / Leave don't sit under the music player. The stage uses grid
+   rows, so growing its bottom padding is the right knob. */
+html.mp-docked .lobby-stage { padding-bottom: 68px; }
 @media (max-width: 820px) {
   html.mp-docked .fire-btn { bottom: 162px; }
 }

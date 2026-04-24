@@ -37,6 +37,7 @@ import { eq } from "drizzle-orm";
 
 const TANK_COLORS = [
   0xff5e5e, 0x5ecfff, 0x8aff5e, 0xffd25e, 0xcf5eff, 0xff9d5e,
+  0x5efff6, 0xff5ec8,
 ];
 
 const BOT_NAMES = [
@@ -135,19 +136,35 @@ export class BattleRoom extends Room<BattleState> {
   /** true once the current turn's tank has fired — blocks spam. */
   private turnFired = false;
   private initialOptions: RoomOptions = { mode: "ffa", username: "Player" };
+  /** Optional join gate for private rooms. Stored only on the instance —
+   *  never written to state — so it doesn't leak through schema patches. */
+  private password: string | null = null;
 
   override async onCreate(options: RoomOptions = { mode: "ffa", username: "Player" }) {
     this.initialOptions = options;
     const mode = (options.mode as GameMode) in MODES ? (options.mode as GameMode) : "ffa";
     this.mode = mode;
     const spec = MODES[mode];
-    this.maxClients = spec.maxPlayers;
+    // Ranked modes lock the cap to the mode spec for fairness; casual
+    // modes (custom/private/bots) let the host pick 2–6.
+    const casual = mode === "custom" || mode === "private" || mode === "bots";
+    const requestedMax = casual ? Number(options.maxPlayers ?? spec.maxPlayers) : spec.maxPlayers;
+    const maxPlayers = clamp(
+      Number.isFinite(requestedMax) ? requestedMax : spec.maxPlayers,
+      Math.max(2, spec.minPlayers),
+      spec.maxPlayers,
+    );
+    this.maxClients = maxPlayers;
 
     const seed = Math.floor(Math.random() * 2 ** 31);
     const biome: BiomeId =
       (options.biome && options.biome in BIOMES
         ? (options.biome as BiomeId)
         : randomBiome());
+
+    const visibility: "public" | "private" =
+      options.visibility === "private" || mode === "private" ? "private" : "public";
+    const lobbyName = sanitizeLobbyName(options.lobbyName, options.username);
 
     this.setState(new BattleState());
     this.setPatchRate(1000 / NETWORK.PATCH_HZ);
@@ -156,12 +173,18 @@ export class BattleRoom extends Room<BattleState> {
     this.state.biome = biome;
     this.state.wind = rollWind();
     this.state.phase = "waiting";
+    this.state.lobbyName = lobbyName;
+    this.state.visibility = visibility;
+    this.state.ranked = spec.ranked;
+    this.state.maxPlayers = maxPlayers;
 
-    if (options.createPrivate || mode === "private") {
-      // Accept the client-generated invite code so the matchmaker's
-      // `filterBy(["mode","inviteCode"])` indexes this room by the
-      // exact code a guest will pass on join. Fall back to a server-
-      // generated code if the client didn't supply one.
+    if (casual) {
+      // Every casual lobby gets an invite code so the matchmaker's
+      // `filterBy(["mode","inviteCode"])` indexes it. Host flips
+      // visibility later; the room shape stays the same. Public
+      // lobbies still expose the code for easy sharing. Accept a
+      // client-supplied code if one arrived (keeps the create/join
+      // handshake intact), else generate server-side.
       const incoming = typeof options.inviteCode === "string"
         ? options.inviteCode.trim().toUpperCase()
         : "";
@@ -173,19 +196,24 @@ export class BattleRoom extends Room<BattleState> {
       // uses to locate it. `filterBy` already means only a client with
       // the exact code can match.
     }
-    this.setMetadata({
-      mode,
-      ranked: spec.ranked,
-      biome,
-      inviteCode: this.state.inviteCode || undefined,
-    });
+    this.refreshMetadata();
 
-    // Preload bots for "bots" mode.
-    if (mode === "bots") {
+    // Preload bots for "bots" mode or for any casual lobby created with a botCount.
+    if (casual && options.botCount != null && Number(options.botCount) > 0) {
+      const count = clamp(
+        Number(options.botCount),
+        1,
+        maxPlayers - 1,
+      );
+      const diff = (options.botDifficulty ?? "normal") as BotDifficulty;
+      for (let i = 0; i < count; i++) {
+        this.addBot(diff);
+      }
+    } else if (mode === "bots") {
       const count = clamp(
         Number(options.botCount ?? spec.preloadedBots ?? 2),
         1,
-        spec.maxPlayers - 1,
+        maxPlayers - 1,
       );
       const diff = (options.botDifficulty ?? "normal") as BotDifficulty;
       for (let i = 0; i < count; i++) {
@@ -214,6 +242,12 @@ export class BattleRoom extends Room<BattleState> {
     if (this.mode === "private" && options.inviteCode) {
       if (options.inviteCode !== this.state.inviteCode) {
         throw new Error("invalid invite code");
+      }
+    }
+    if (this.state.visibility === "private" && this.password !== null) {
+      const supplied = typeof options.password === "string" ? options.password : "";
+      if (supplied !== this.password) {
+        throw new Error("password required");
       }
     }
     return true;
@@ -263,6 +297,11 @@ export class BattleRoom extends Room<BattleState> {
       chats: [],
     });
 
+    if (!this.state.hostSessionId) {
+      this.state.hostSessionId = client.sessionId;
+    }
+    this.refreshMetadata();
+
     this.broadcastEvent({
       type: "chat",
       name: "server",
@@ -306,6 +345,14 @@ export class BattleRoom extends Room<BattleState> {
     });
     this.state.players.delete(sessionId);
     this.sessions.delete(sessionId);
+    if (this.state.hostSessionId === sessionId) {
+      // Promote the next human; fall back to first remaining player.
+      const next =
+        Array.from(this.state.players.values()).find((q) => !q.bot) ??
+        Array.from(this.state.players.values())[0];
+      this.state.hostSessionId = next?.id ?? "";
+    }
+    this.refreshMetadata();
     if (this.state.phase === "playing") {
       this.turnOrder = this.turnOrder.filter((id) => id !== sessionId);
       if (this.state.currentTurnId === sessionId) this.advanceTurn();
@@ -379,6 +426,9 @@ export class BattleRoom extends Room<BattleState> {
       case "setMatchSettings":
         this.handleSetMatchSettings(client, msg);
         break;
+      case "setLobbyConfig":
+        this.handleSetLobbyConfig(client, msg);
+        break;
     }
   }
 
@@ -387,8 +437,9 @@ export class BattleRoom extends Room<BattleState> {
     sessionId: string,
     difficulty: BotDifficulty,
   ): void {
-    if (!(this.mode === "bots" || this.mode === "private")) return;
+    if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
+    if (client.sessionId !== this.state.hostSessionId) return;
     const p = this.state.players.get(sessionId);
     if (!p || !p.bot) return;
     const spec = BOT_DIFFICULTY_SPECS[difficulty];
@@ -401,8 +452,9 @@ export class BattleRoom extends Room<BattleState> {
   }
 
   private handleRemoveBot(client: Client, sessionId: string): void {
-    if (!(this.mode === "bots" || this.mode === "private")) return;
+    if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
+    if (client.sessionId !== this.state.hostSessionId) return;
     const victim = this.state.players.get(sessionId);
     if (!victim || !victim.bot) return;
     this.state.players.delete(sessionId);
@@ -414,6 +466,98 @@ export class BattleRoom extends Room<BattleState> {
       at: Date.now(),
     });
     void client;
+  }
+
+  private isCasualLobby(): boolean {
+    return (
+      this.mode === "bots" ||
+      this.mode === "private" ||
+      this.mode === "custom"
+    );
+  }
+
+  private regenerateTerrainFor(biome: BiomeId): void {
+    this.state.biome = biome;
+    const newSeed = Math.floor(Math.random() * 2 ** 31);
+    this.state.projectiles.clear();
+    this.state.fires.clear();
+    this.world = new World(this.state, newSeed, biome);
+    this.state.players.forEach((p) => {
+      const spawnX = this.pickSpawnX();
+      p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+      this.world.spawnTankAt(p, spawnX);
+    });
+  }
+
+  private refreshMetadata(): void {
+    const hostName =
+      this.state.hostSessionId
+        ? this.state.players.get(this.state.hostSessionId)?.name ?? ""
+        : "";
+    const started =
+      this.state.phase !== "waiting" && this.state.phase !== "ended";
+    this.setMetadata({
+      mode: this.mode,
+      ranked: this.state.ranked,
+      biome: this.state.biome,
+      lobbyName: this.state.lobbyName || undefined,
+      visibility: this.state.visibility,
+      hostName: hostName || undefined,
+      started,
+      inviteCode: this.state.inviteCode || undefined,
+    });
+  }
+
+  private handleSetLobbyConfig(
+    client: Client,
+    msg: {
+      lobbyName?: string;
+      maxPlayers?: number;
+      biome?: string;
+      visibility?: "public" | "private";
+      password?: string;
+    },
+  ): void {
+    if (this.state.phase !== "waiting") return;
+    if (!this.isCasualLobby()) return;
+    if (client.sessionId !== this.state.hostSessionId) return;
+
+    let terrainDirty = false;
+    if (typeof msg.lobbyName === "string") {
+      this.state.lobbyName = sanitizeLobbyName(msg.lobbyName, undefined);
+    }
+    if (msg.maxPlayers != null) {
+      const cap = MODES[this.mode].maxPlayers;
+      const newMax = clamp(Number(msg.maxPlayers), 2, cap);
+      if (newMax >= this.state.players.size) {
+        this.state.maxPlayers = newMax;
+        this.maxClients = newMax;
+      }
+    }
+    if (typeof msg.biome === "string") {
+      // "random" flags the biome as a mystery — stays hidden until the
+      // match starts and then re-rolls. Concrete biomes swap terrain now.
+      if (msg.biome === "random") {
+        this.state.biomeRandom = true;
+      } else if (msg.biome in BIOMES) {
+        const newBiome = msg.biome as BiomeId;
+        this.state.biomeRandom = false;
+        if (newBiome !== this.state.biome) {
+          this.regenerateTerrainFor(newBiome);
+          terrainDirty = true;
+        }
+      }
+    }
+    if (msg.visibility === "public" || msg.visibility === "private") {
+      this.state.visibility = msg.visibility;
+    }
+    if (typeof msg.password === "string") {
+      const trimmed = msg.password.trim().slice(0, 64);
+      this.password = trimmed.length > 0 ? trimmed : null;
+      this.state.hasPassword = this.password !== null;
+    }
+    this.refreshMetadata();
+    void terrainDirty;
   }
 
   private handleSetMatchSettings(
@@ -601,13 +745,12 @@ export class BattleRoom extends Room<BattleState> {
   }
 
   private handleAddBot(client: Client, difficulty?: BotDifficulty): void {
-    // Only allow adding bots in bots-mode / private rooms while in lobby.
-    if (!(this.mode === "bots" || this.mode === "private")) return;
+    // Casual lobbies only; ranked queues fill themselves via Matchmaking.ts.
+    if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
-    if (this.state.players.size >= MODES[this.mode].maxPlayers) return;
+    if (client.sessionId !== this.state.hostSessionId) return;
+    if (this.state.players.size >= this.state.maxPlayers) return;
     this.addBot(difficulty ?? "normal");
-    // Host privilege check left permissive for simplicity. Session is validated.
-    void client;
   }
 
   private maybeStartCountdown(): void {
@@ -619,6 +762,7 @@ export class BattleRoom extends Room<BattleState> {
     if (!humans.every((p) => p.ready)) return;
     this.state.phase = "countdown";
     this.state.roundStartsAt = Date.now() + 5_000;
+    this.refreshMetadata();
     setTimeout(() => this.startMatch(), 5_000);
   }
 
@@ -706,7 +850,14 @@ export class BattleRoom extends Room<BattleState> {
     if (ids.length < MODES[this.mode].minPlayers) {
       this.state.phase = "waiting";
       this.state.players.forEach((p) => (p.ready = false));
+      this.refreshMetadata();
       return;
+    }
+    // Mystery biome? Resolve now — re-roll terrain so the first thing
+    // anyone sees at phase flip is the real map.
+    if (this.state.biomeRandom) {
+      this.regenerateTerrainFor(randomBiome());
+      this.state.biomeRandom = false;
     }
     shuffle(ids);
     this.turnOrder = ids;
@@ -715,6 +866,7 @@ export class BattleRoom extends Room<BattleState> {
     this.state.matchStartedAt = Date.now();
     this.matchStartedAtMs = this.state.matchStartedAt;
     this.state.turnNumber = 0;
+    this.refreshMetadata();
     this.logEvent({ kind: "start", players: ids, mode: this.mode });
     matchesStarted.inc({ mode: this.mode });
     this.advanceTurn();
@@ -977,12 +1129,7 @@ export class BattleRoom extends Room<BattleState> {
       p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
       this.world.spawnTankAt(p, spawnX);
     });
-    this.setMetadata({
-      mode: this.mode,
-      ranked: MODES[this.mode].ranked,
-      biome: newBiome,
-      inviteCode: this.state.inviteCode || undefined,
-    });
+    this.refreshMetadata();
     this.broadcastEvent({
       type: "chat",
       name: "server",
@@ -1044,6 +1191,13 @@ function generateInviteCode(): string {
   let out = "";
   for (let i = 0; i < 6; i++) out += alphabet[Math.floor(Math.random() * alphabet.length)];
   return out;
+}
+
+function sanitizeLobbyName(raw: unknown, fallbackOwner: unknown): string {
+  const s = typeof raw === "string" ? raw.trim().slice(0, 32) : "";
+  if (s) return s;
+  const owner = typeof fallbackOwner === "string" ? fallbackOwner.trim().slice(0, 16) : "";
+  return owner ? `${owner}'s lobby` : "Lobby";
 }
 
 async function resolveIdentity(

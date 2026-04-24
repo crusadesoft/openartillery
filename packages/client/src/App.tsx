@@ -53,7 +53,10 @@ export function App(): JSX.Element {
     // Without this, the old battle UI bleeds through until the new join
     // finishes because the component stays mounted and the effect
     // cleanup runs after the render.
-    const gameKey = `${route.mode}:${route.inviteCode ?? ""}:${route.botCount ?? ""}:${route.biome ?? ""}`;
+    // Include `create` so `/game/new` navigates differently from a
+    // specific `roomId` route; but once we replaceState to /game/room/...
+    // the same mounted component continues running (key is stable).
+    const gameKey = `${route.mode}:${route.roomId ?? (route.create ? "new" : "")}:${route.inviteCode ?? ""}:${route.botCount ?? ""}:${route.biome ?? ""}`;
     return (
       <>
         <GamePage key={gameKey} route={route} navigate={navigate} />

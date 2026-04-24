@@ -10,9 +10,16 @@ interface Entry {
 interface Props {
   entries: Entry[];
   onSend: (text: string) => void;
+  variant?: "floating" | "embedded";
+  placeholder?: string;
 }
 
-export function ChatPanel({ entries, onSend }: Props): JSX.Element {
+export function ChatPanel({
+  entries,
+  onSend,
+  variant = "floating",
+  placeholder = "Press T to chat · Enter sends · Esc cancels",
+}: Props): JSX.Element {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -63,7 +70,10 @@ export function ChatPanel({ entries, onSend }: Props): JSX.Element {
   };
 
   return (
-    <div className="chat-panel" onPointerDown={(e) => e.stopPropagation()}>
+    <div
+      className={`chat-panel ${variant === "embedded" ? "embedded" : ""}`}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
       <div className="chat-log" ref={logRef}>
         {entries.map((e) => (
           <div key={e.id} className={e.system ? "system" : undefined}>
@@ -83,7 +93,7 @@ export function ChatPanel({ entries, onSend }: Props): JSX.Element {
         value={text}
         onChange={(e) => setText(e.target.value)}
         onKeyDown={onKeyDown}
-        placeholder="Press T to chat · Enter sends · Esc cancels"
+        placeholder={placeholder}
         maxLength={140}
       />
     </div>
