@@ -163,7 +163,7 @@ function Slider({
     <div className="field">
       <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ flex: 1 }}>
-          {label} · {muted ? <em style={{ color: "var(--rust-bright)" }}>MUTED</em> : `${Math.round(value * 100)}%`}
+          {label} · {muted ? <em style={{ color: "var(--theme-accent-bright)" }}>MUTED</em> : `${Math.round(value * 100)}%`}
         </span>
         {muteKey && (
           <button
@@ -171,8 +171,15 @@ function Slider({
             className={`mute-chip ${muted ? "on" : ""}`}
             onClick={() => Sound.toggleMuted(muteKey)}
             title={muted ? "Un-mute" : "Mute"}
+            aria-label={muted ? "Un-mute" : "Mute"}
           >
-            {muted ? "MUTED" : "MUTE"}
+            <span
+              className="icon-mask mute-chip-icon"
+              style={{
+                WebkitMaskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
+                maskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
+              }}
+            />
           </button>
         )}
       </label>

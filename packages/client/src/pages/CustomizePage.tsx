@@ -310,10 +310,15 @@ function drawPreview(
   if (!ctx) return;
   ctx.clearRect(0, 0, w, h);
 
+  const accentRgb = (
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--theme-accent-rgb").trim()
+  ) || "224, 120, 69";
+
   // Textured "deck" where the tank sits.
   const deck = ctx.createLinearGradient(0, h - 70, 0, h);
   deck.addColorStop(0, "rgba(20, 16, 12, 0.0)");
-  deck.addColorStop(1, "rgba(90, 50, 20, 0.55)");
+  deck.addColorStop(1, `rgba(${accentRgb}, 0.4)`);
   ctx.fillStyle = deck;
   ctx.fillRect(0, h - 70, w, 70);
 
@@ -359,7 +364,7 @@ function drawPreview(
     decal: l.decal,
   });
 
-  ctx.fillStyle = "rgba(240, 180, 80, 0.85)";
+  ctx.fillStyle = `rgba(${accentRgb}, 0.85)`;
   ctx.font = "bold 9px 'JetBrains Mono', monospace";
   ctx.fillText("PREVIEW", 12, 20);
 }

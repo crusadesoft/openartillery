@@ -11,6 +11,7 @@ import {
   type PatternStyle,
   type TurretStyle,
 } from "../game/tankPreview";
+import { rankFor } from "../game/ranks";
 
 interface Props { navigate: (r: Route) => void; }
 
@@ -32,21 +33,6 @@ interface EntryDisplay extends LeaderboardEntry {
   demo?: boolean;
 }
 
-const RANKS = [
-  { min: 2400, name: "General",    color: "#ffd25e", icon: "/icons/ranks/general.svg" },
-  { min: 2100, name: "Colonel",    color: "#9d2a7a", icon: "/icons/ranks/colonel.svg" },
-  { min: 1900, name: "Major",      color: "#c03a3a", icon: "/icons/ranks/major.svg" },
-  { min: 1700, name: "Captain",    color: "#e85c25", icon: "/icons/ranks/captain.svg" },
-  { min: 1500, name: "Lieutenant", color: "#e07845", icon: "/icons/ranks/lieutenant.svg" },
-  { min: 1300, name: "Sergeant",   color: "#d49228", icon: "/icons/ranks/sergeant.svg" },
-  { min: 1100, name: "Corporal",   color: "#b8a050", icon: "/icons/ranks/corporal.svg" },
-  { min: 900,  name: "Private",    color: "#a8a070", icon: "/icons/ranks/private.svg" },
-  { min: 0,    name: "Recruit",    color: "#8a8477", icon: "/icons/ranks/shield.svg" },
-];
-
-function rankFor(mmr: number) {
-  return RANKS.find((r) => mmr >= r.min) ?? RANKS[RANKS.length - 1]!;
-}
 
 // Leaderboard-level deterministic pseudo-loadout generator so every operator
 // reads as a distinct silhouette even if the server doesn't persist the

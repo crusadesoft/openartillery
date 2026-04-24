@@ -56,7 +56,7 @@ body {
   background-color: #1a0f08;
 }
 
-a { color: var(--amber-bright); text-decoration: none; }
+a { color: var(--theme-accent-bright); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { font-family: inherit; cursor: pointer; color: inherit; }
 input, select { font-family: inherit; }

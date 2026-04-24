@@ -470,8 +470,14 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
     }
 
     // Draw ————————————————————————————————————————————————————————
+    function themeAccentRgb(): string {
+      const v = getComputedStyle(document.documentElement)
+        .getPropertyValue("--theme-accent-rgb").trim();
+      return v || "224, 120, 69";
+    }
     function drawScene() {
       ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
+      const accentRgb = themeAccentRgb();
 
       // Sky.
       const sky = ctx.createLinearGradient(0, 0, 0, groundY);
@@ -480,10 +486,10 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, PREVIEW_W, groundY);
 
-      // Ground (with mounds baked in).
+      // Ground (with mounds baked in). Tinted per theme via accent-rgb.
       const ground = ctx.createLinearGradient(0, groundY, 0, PREVIEW_H);
-      ground.addColorStop(0, "#3a2a18");
-      ground.addColorStop(1, "#15100a");
+      ground.addColorStop(0, `rgba(${accentRgb}, 0.22)`);
+      ground.addColorStop(1, "rgba(0, 0, 0, 0.92)");
       ctx.fillStyle = ground;
       ctx.beginPath();
       ctx.moveTo(0, groundY);
@@ -495,7 +501,7 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.lineTo(0, PREVIEW_H);
       ctx.closePath();
       ctx.fill();
-      ctx.fillStyle = "rgba(255, 200, 120, 0.35)";
+      ctx.fillStyle = `rgba(${accentRgb}, 0.35)`;
       // Rim highlight along the mound silhouette.
       ctx.beginPath();
       ctx.moveTo(0, groundY - 0.5);
@@ -504,13 +510,13 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       }
       ctx.lineTo(PREVIEW_W, groundY - 0.5);
       ctx.lineWidth = 1;
-      ctx.strokeStyle = "rgba(255, 200, 120, 0.3)";
+      ctx.strokeStyle = `rgba(${accentRgb}, 0.3)`;
       ctx.stroke();
 
       // Tank silhouette.
       drawMiniTank(ctx, tankX, tankY, barrelAngle);
       // Target marker.
-      ctx.fillStyle = "rgba(255, 180, 80, 0.7)";
+      ctx.fillStyle = `rgba(${accentRgb}, 0.75)`;
       ctx.fillRect(targetX - 10, groundY - 1, 20, 2);
       ctx.fillRect(targetX - 1, groundY - 6, 2, 6);
 

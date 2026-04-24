@@ -1,6 +1,7 @@
 /* Stylesheet manifest. Order matters: tokens → base → components → pages,
    with theme overrides last so their [data-theme="..."] selectors win. */
 @import "./tokens.css";
+@import "./semantic.css";
 @import "./base.css";
 @import "./typography.css";
 @import "./backdrop.css";

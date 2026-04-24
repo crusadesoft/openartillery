@@ -250,26 +250,26 @@ function Radar(): JSX.Element {
     <svg viewBox="0 0 100 100" className="radar">
       <defs>
         <radialGradient id="rad" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#2a1d10" />
-          <stop offset="100%" stopColor="#0a0604" />
+          <stop offset="0%" stopColor="rgba(var(--theme-accent-rgb),0.22)" />
+          <stop offset="100%" stopColor="rgba(0,0,0,0.85)" />
         </radialGradient>
         <linearGradient id="sweep" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="rgba(180,220,140,0.0)" />
-          <stop offset="100%" stopColor="rgba(180,220,140,0.55)" />
+          <stop offset="0%" stopColor="rgba(var(--theme-accent-rgb),0)" />
+          <stop offset="100%" stopColor="rgba(var(--theme-accent-rgb),0.55)" />
         </linearGradient>
       </defs>
-      <circle cx="50" cy="50" r="48" fill="url(#rad)" stroke="rgba(208,120,60,0.4)" strokeWidth="1" />
-      <circle cx="50" cy="50" r="32" fill="none" stroke="rgba(208,120,60,0.2)" />
-      <circle cx="50" cy="50" r="16" fill="none" stroke="rgba(208,120,60,0.2)" />
-      <line x1="2" y1="50" x2="98" y2="50" stroke="rgba(208,120,60,0.12)" />
-      <line x1="50" y1="2" x2="50" y2="98" stroke="rgba(208,120,60,0.12)" />
+      <circle cx="50" cy="50" r="48" fill="url(#rad)" stroke="rgba(var(--theme-accent-rgb),0.4)" strokeWidth="1" />
+      <circle cx="50" cy="50" r="32" fill="none" stroke="rgba(var(--theme-accent-rgb),0.2)" />
+      <circle cx="50" cy="50" r="16" fill="none" stroke="rgba(var(--theme-accent-rgb),0.2)" />
+      <line x1="2" y1="50" x2="98" y2="50" stroke="rgba(var(--theme-accent-rgb),0.12)" />
+      <line x1="50" y1="2" x2="50" y2="98" stroke="rgba(var(--theme-accent-rgb),0.12)" />
       <g className="radar-sweep">
         <path d="M50,50 L50,2 A48,48 0 0,1 96,56 Z" fill="url(#sweep)" opacity="0.7" />
       </g>
-      <circle cx="68" cy="34" r="1.6" fill="#ffbe52" />
-      <circle cx="34" cy="62" r="1.6" fill="#ffbe52" />
-      <circle cx="58" cy="72" r="1.6" fill="#ffbe52" />
-      <circle cx="50" cy="50" r="2" fill="#ff6b3a" />
+      <circle cx="68" cy="34" r="1.6" fill="var(--theme-accent-bright)" />
+      <circle cx="34" cy="62" r="1.6" fill="var(--theme-accent-bright)" />
+      <circle cx="58" cy="72" r="1.6" fill="var(--theme-accent-bright)" />
+      <circle cx="50" cy="50" r="2" fill="var(--theme-accent)" />
     </svg>
   );
 }
@@ -278,24 +278,24 @@ function WindDial({ wind }: { wind: number }) {
   const mag = Math.min(1, Math.abs(wind) / 25);
   return (
     <svg viewBox="0 0 80 80" className="wind-dial">
-      <circle cx="40" cy="40" r="38" fill="rgba(0,0,0,0.5)" stroke="rgba(208,120,60,0.4)" />
-      <circle cx="40" cy="40" r="26" fill="none" stroke="rgba(208,120,60,0.18)" />
+      <circle cx="40" cy="40" r="38" fill="rgba(0,0,0,0.5)" stroke="rgba(var(--theme-accent-rgb),0.4)" />
+      <circle cx="40" cy="40" r="26" fill="none" stroke="rgba(var(--theme-accent-rgb),0.18)" />
       {Array.from({ length: 12 }).map((_, i) => {
         const a = (i / 12) * Math.PI * 2;
         const x1 = 40 + Math.cos(a) * 32;
         const y1 = 40 + Math.sin(a) * 32;
         const x2 = 40 + Math.cos(a) * 36;
         const y2 = 40 + Math.sin(a) * 36;
-        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(208,120,60,0.5)" />;
+        return <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="rgba(var(--theme-accent-rgb),0.5)" />;
       })}
       <g style={{ transform: `rotate(${wind >= 0 ? 0 : 180}deg)`, transformOrigin: "40px 40px" }}>
         <polygon
           points={`36,${34 - mag * 20} 44,${34 - mag * 20} 40,${16 - mag * 24}`}
-          fill="#ffbe52"
+          fill="var(--theme-accent-bright)"
         />
-        <circle cx="40" cy="40" r="4" fill="#ffbe52" />
+        <circle cx="40" cy="40" r="4" fill="var(--theme-accent-bright)" />
       </g>
-      <text x="40" y="68" textAnchor="middle" fontFamily="JetBrains Mono" fontSize="11" fill="#ffd49a">
+      <text x="40" y="68" textAnchor="middle" fontFamily="JetBrains Mono" fontSize="11" fill="var(--theme-accent-bright)">
         {Math.round(Math.abs(wind))}
       </text>
     </svg>

@@ -46,8 +46,9 @@
   --theme-accent-rgb: 224, 120, 69;      /* rust-bright rgb — for rgba glows */
   --theme-brand: var(--rust-bright);
   --theme-card-texture: url("/textures/ui/rust.jpg");
+  --theme-btn-texture: url("/textures/ui/plates.jpg");
   --theme-card-wash: linear-gradient(90deg, rgba(150,60,20,0.15), rgba(150,60,20,0) 120px);
-  --theme-card-tint: linear-gradient(180deg, rgba(24,18,12,0.78), rgba(10,8,6,0.88));
+  --theme-card-tint: linear-gradient(180deg, rgba(40,20,10,0.65), rgba(18,10,4,0.82));
   --theme-btn-primary-fill: #b14120;
   --theme-btn-primary-gradient: linear-gradient(180deg, rgba(220,100,40,0.55), rgba(90,20,6,0.9));
   --theme-btn-primary-border: #3b1508;
@@ -60,4 +61,17 @@
   --theme-nav-underline: rgba(120, 90, 40, 0.2);
   --theme-splash-glow-a: rgba(255, 180, 90, 0.35);
   --theme-splash-glow-b: rgba(200, 80, 30, 0.22);
+
+  /* Control accents — slider thumb (idle), switch handle (on state). */
+  --theme-ctl-top: #d49228;
+  --theme-ctl-bottom: #8c5d14;
+  --theme-switch-on-bg: #6e4a10;
+  --theme-switch-on-top: #ffc56e;
+  --theme-switch-on-bottom: #a5631a;
+
+  /* Switch OFF state — track bg + handle gradient when toggle is off. */
+  --theme-switch-off-bg: #1a1208;
+  --theme-switch-off-track-tint: linear-gradient(180deg, rgba(60,55,40,0.6), rgba(12,10,6,0.9));
+  --theme-switch-off-top: #8d7a4e;
+  --theme-switch-off-bottom: #3a2d15;
 }

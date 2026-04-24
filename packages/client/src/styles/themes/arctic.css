@@ -4,8 +4,9 @@
   --theme-accent-rgb: 122, 207, 255;
   --theme-brand: #a8dcff;
   --theme-card-texture: url("/textures/ui/arctic.jpg");
+  --theme-btn-texture: url("/textures/ui/arctic.jpg");
   --theme-card-wash: linear-gradient(90deg, rgba(100,150,200,0.14), rgba(100,150,200,0) 120px);
-  --theme-card-tint: linear-gradient(180deg, rgba(14,22,32,0.78), rgba(8,14,22,0.92));
+  --theme-card-tint: linear-gradient(180deg, rgba(20,50,80,0.6), rgba(8,18,30,0.82));
   --theme-btn-primary-fill: #2b5a7e;
   --theme-btn-primary-gradient: linear-gradient(180deg, rgba(100,180,230,0.55), rgba(20,50,80,0.9));
   --theme-btn-primary-border: #08141f;
@@ -18,4 +19,13 @@
   --theme-nav-underline: rgba(110, 180, 230, 0.2);
   --theme-splash-glow-a: rgba(170, 220, 255, 0.3);
   --theme-splash-glow-b: rgba(80, 140, 200, 0.2);
+  --theme-ctl-top: #7acfff;
+  --theme-ctl-bottom: #2b5a7e;
+  --theme-switch-on-bg: #1a3e5c;
+  --theme-switch-on-top: #a8dcff;
+  --theme-switch-on-bottom: #3c6d90;
+  --theme-switch-off-bg: #0a1420;
+  --theme-switch-off-track-tint: linear-gradient(180deg, rgba(40,70,100,0.5), rgba(4,10,20,0.92));
+  --theme-switch-off-top: #6c8fa8;
+  --theme-switch-off-bottom: #1a2e42;
 }

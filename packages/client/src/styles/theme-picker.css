@@ -78,4 +78,4 @@
   color: var(--ink-dim);
   font-weight: 600;
 }
-.theme-swatch.on .theme-label { color: var(--amber-bright); }
+.theme-swatch.on .theme-label { color: var(--theme-accent-bright); }

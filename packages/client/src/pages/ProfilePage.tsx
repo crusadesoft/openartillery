@@ -5,37 +5,11 @@ import type { Route } from "../router";
 import { useAuth } from "../auth/AuthProvider";
 import { loadLoadout } from "../game/loadoutStorage";
 import { renderLoadoutCanvas } from "../game/tankPreview";
+import { RANKS, rankFor } from "../game/ranks";
 
 interface Props {
   username: string;
   navigate: (r: Route) => void;
-}
-
-interface Rank {
-  name: string;
-  min: number;
-  next: number;
-  color: string;
-  icon: string;
-}
-
-const RANKS: Rank[] = [
-  { name: "Recruit",    min: 0,    next: 900,  color: "#8a8477", icon: "/icons/ranks/shield.svg" },
-  { name: "Private",    min: 900,  next: 1100, color: "#a8a070", icon: "/icons/ranks/private.svg" },
-  { name: "Corporal",   min: 1100, next: 1300, color: "#b8a050", icon: "/icons/ranks/corporal.svg" },
-  { name: "Sergeant",   min: 1300, next: 1500, color: "#d49228", icon: "/icons/ranks/sergeant.svg" },
-  { name: "Lieutenant", min: 1500, next: 1700, color: "#e07845", icon: "/icons/ranks/lieutenant.svg" },
-  { name: "Captain",    min: 1700, next: 1900, color: "#e85c25", icon: "/icons/ranks/captain.svg" },
-  { name: "Major",      min: 1900, next: 2100, color: "#c03a3a", icon: "/icons/ranks/major.svg" },
-  { name: "Colonel",    min: 2100, next: 2400, color: "#9d2a7a", icon: "/icons/ranks/colonel.svg" },
-  { name: "General",    min: 2400, next: 2400, color: "#ffd25e", icon: "/icons/ranks/general.svg" },
-];
-
-function rankFor(mmr: number): Rank {
-  for (let i = RANKS.length - 1; i >= 0; i--) {
-    if (mmr >= RANKS[i]!.min) return RANKS[i]!;
-  }
-  return RANKS[0]!;
 }
 
 interface Medal {
@@ -144,7 +118,7 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
           </div>
           <div className="dogtag-stamp">
             ENLISTED · {new Date(profile.createdAt).getFullYear()}
-            {isDemo && <><br /><span style={{ color: "var(--rust-bright)", fontSize: 10 }}>DEMO OPERATOR</span></>}
+            {isDemo && <><br /><span style={{ color: "var(--theme-accent-bright)", fontSize: 10 }}>DEMO OPERATOR</span></>}
           </div>
         </div>
       </div>
@@ -191,7 +165,7 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
                   className="icon-mask"
                   style={{
                     width: 32, height: 32,
-                    background: m.earned ? "#ffd49a" : "#4a4a4a",
+                    background: m.earned ? "var(--theme-accent-bright)" : "var(--ash)",
                     WebkitMaskImage: `url(${m.iconUrl})`,
                     maskImage: `url(${m.iconUrl})`,
                     WebkitMaskSize: "contain",
@@ -382,7 +356,7 @@ function CombatTile({
     accent === "ok" ? "var(--ok)"
     : accent === "bad" ? "var(--danger)"
     : accent === "warn" ? "var(--warn)"
-    : accent === "amber" ? "var(--amber-bright)"
+    : accent === "amber" ? "var(--theme-accent-bright)"
     : "var(--ink)";
   return (
     <div className={`combat-tile ${big ? "big" : ""}`}>
