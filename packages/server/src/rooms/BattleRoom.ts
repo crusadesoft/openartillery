@@ -29,10 +29,10 @@ import { logger } from "../logger.js";
 import { matchesFinished, matchesStarted } from "../metrics.js";
 import { persistMatch } from "../match/persist.js";
 import {
-  BOT_NAMES,
   TANK_COLORS,
   clamp,
   generateInviteCode,
+  pickBotName,
   rateAllow,
   resolveIdentity,
   rollWind,
@@ -252,7 +252,12 @@ export class BattleRoom extends Room<BattleState> {
     const p = this.state.players.get(client.sessionId);
     if (!p) return;
     p.connected = false;
-    if (consented || this.state.phase === "ended" || this.state.phase === "waiting") {
+    if (
+      consented ||
+      this.state.phase === "ended" ||
+      this.state.phase === "waiting" ||
+      this.state.phase === "countdown"
+    ) {
       this.finalizeLeave(client.sessionId);
       return;
     }
@@ -642,7 +647,9 @@ export class BattleRoom extends Room<BattleState> {
 
   addBot(difficulty: BotDifficulty = "normal"): Player {
     const spec = BOT_DIFFICULTY_SPECS[difficulty];
-    const name = BOT_NAMES[Math.floor(Math.random() * BOT_NAMES.length)]!;
+    const taken: string[] = [];
+    this.state.players.forEach((p) => taken.push(p.name));
+    const name = pickBotName(taken);
     const sessionId = `bot_${randomBytes(4).toString("hex")}`;
     const p = new Player();
     p.id = sessionId;

@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { matchMaker } from "@colyseus/core";
-import { desc, eq, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { db, schema } from "../db/index.js";
 import { apiLimiter } from "../middleware/rateLimit.js";
 import { optionalAuth, requireAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -115,7 +115,7 @@ apiRouter.get(
     const ids = rows.map((r) => r.id);
     const parts = ids.length
       ? await db.query.matchParticipants.findMany({
-          where: sql`${schema.matchParticipants.matchId} = ANY(${ids})`,
+          where: inArray(schema.matchParticipants.matchId, ids),
         })
       : [];
     const byMatch = new Map<string, typeof parts>();

@@ -96,6 +96,26 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
     };
   }, [connect]);
 
+  // Tab close / browser nav / mobile background — without this the
+  // server only sees an unconsented WS drop and parks the seat in
+  // reconnection grace for ~20s, leaving a phantom slot in the lobby.
+  // Sending leave() up front turns it into a consented departure that
+  // finalizes immediately. pagehide fires on close + bfcache + nav,
+  // beforeunload covers older browsers.
+  useEffect(() => {
+    const flushLeave = () => {
+      const r = roomRef.current;
+      if (!r) return;
+      try { r.leave(); } catch { /* ignore */ }
+    };
+    window.addEventListener("pagehide", flushLeave);
+    window.addEventListener("beforeunload", flushLeave);
+    return () => {
+      window.removeEventListener("pagehide", flushLeave);
+      window.removeEventListener("beforeunload", flushLeave);
+    };
+  }, []);
+
   if (state.kind === "connecting") {
     return (
       <div className="screen">

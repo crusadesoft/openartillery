@@ -10,6 +10,7 @@ type SfxKey =
   | "thud"
   | "ui_click"
   | "turn"
+  | "low_time"
   | "death";
 
 const SFX_URLS: Record<SfxKey, string[]> = {
@@ -20,20 +21,28 @@ const SFX_URLS: Record<SfxKey, string[]> = {
   thud: ["/audio/sfx/thud.ogg"],
   ui_click: ["/audio/sfx/ui_click.ogg"],
   turn: ["/audio/sfx/turn.ogg"],
+  low_time: ["/audio/sfx/low_time.wav"],
   death: ["/audio/sfx/explosion_med.wav"],
 };
 
 const SFX_GAIN: Record<SfxKey, number> = {
   fire_small: 0.7, fire_big: 0.85, boom_small: 0.75, boom_big: 0.9,
-  thud: 0.6, ui_click: 0.35, turn: 0.4, death: 0.8,
+  thud: 0.6, ui_click: 0.35, turn: 0.4, low_time: 0.5,
+  death: 0.8,
 };
 
 const SFX_CATEGORY: Record<SfxKey, Category> = {
   fire_small: "sfx", fire_big: "sfx", boom_small: "sfx", boom_big: "sfx",
-  thud: "sfx", ui_click: "ui", turn: "ui", death: "sfx",
+  thud: "sfx", ui_click: "ui", turn: "ui", low_time: "ui",
+  death: "sfx",
 };
 
 const TREAD_URL = "/audio/sfx/tread.ogg";
+const WIND_URL = "/audio/sfx/wind.mp3";
+
+/** Source file is loud, so cap the loop's max contribution well below 1.
+ *  Player still has the SFX slider on top of this for fine tuning. */
+const WIND_MAX_GAIN = 0.18;
 
 export type MusicContext = "menu" | "battle";
 export interface Track { title: string; artist: string; url: string; }
@@ -79,6 +88,11 @@ class SoundManager {
   private tread: Howl | null = null;
   private treadId: number | null = null;
   private treading = false;
+  private wind: Howl | null = null;
+  private windId: number | null = null;
+  /** Last strength fed to setWind, in [0,1]. Cached so volume slider /
+   *  mute changes can recompute without the caller re-supplying it. */
+  private windStrength = 0;
   private currentMusic: {
     key: string;
     context: MusicContext;
@@ -129,11 +143,12 @@ class SoundManager {
   setMasterVolume(v: number): void {
     this.master = clamp01(v);
     this.applyMusicVolume();
+    this.applyWindVolume();
     Howler.volume(1);
   }
 
   setMusicVolume(v: number): void { this.musicGain = clamp01(v); this.applyMusicVolume(); }
-  setSfxVolume(v: number): void { this.sfxGain = clamp01(v); }
+  setSfxVolume(v: number): void { this.sfxGain = clamp01(v); this.applyWindVolume(); }
   setUiVolume(v: number): void { this.uiGain = clamp01(v); }
 
   getVolume(c: "master" | "music" | "sfx" | "ui"): number {
@@ -151,6 +166,7 @@ class SoundManager {
     this.muted[c] = !this.muted[c];
     this.persistMutes();
     this.applyMusicVolume();
+    this.applyWindVolume();
     for (const cb of this.mutedListeners) cb();
   }
 
@@ -164,6 +180,7 @@ class SoundManager {
         if (typeof parsed[k] === "boolean") this.muted[k] = parsed[k] as boolean;
       }
       this.applyMusicVolume();
+      this.applyWindVolume();
       for (const cb of this.mutedListeners) cb();
     } catch { /* ignore */ }
   }
@@ -208,6 +225,36 @@ class SoundManager {
       const h = this.tread;
       setTimeout(() => { try { h.pause(t); } catch { /* ignore */ } }, 260);
     }
+  }
+
+  // ─── Wind ambience loop ───────────────────────────────────────────
+  /** Drive an always-running ambient loop whose volume tracks wind
+   *  strength. `strength` ∈ [0,1] (0 = silent, 1 = WIND_MAX_GAIN). Call
+   *  every frame; cheap when nothing changes. */
+  setWind(strength: number): void {
+    const s = clamp01(strength);
+    this.windStrength = s;
+    if (s <= 0) {
+      if (this.wind && this.windId != null) this.wind.volume(0, this.windId);
+      return;
+    }
+    if (!this.wind) {
+      this.wind = new Howl({ src: [WIND_URL], loop: true, volume: 0 });
+    }
+    if (this.windId == null) this.windId = this.wind.play();
+    const vol =
+      this.effective("master") * this.effective("sfx") * WIND_MAX_GAIN * s;
+    this.wind.volume(vol, this.windId);
+  }
+
+  private applyWindVolume(): void {
+    if (!this.wind || this.windId == null) return;
+    const vol =
+      this.effective("master") *
+      this.effective("sfx") *
+      WIND_MAX_GAIN *
+      this.windStrength;
+    this.wind.volume(vol, this.windId);
   }
 
   private applyMusicVolume(): void {

@@ -15,3 +15,6 @@ with credit.
 - **Cannon fire** (`cannon_fire.ogg`) — Thimras · opengameart.org · **CC0**
 - **UI click, turn, thud** (`ui_click.ogg`, `turn.ogg`, `thud.ogg`) — p0ss ·
   "Interface Sounds Starter Pack" on opengameart.org · **CC-BY-SA 3.0**
+- **Low-time warning** (`low_time.wav`) — "Alert/Notification Sound" on
+  opengameart.org · **CC0**
+- **Wind ambience** (`wind.mp3`) — soundreality · "Wind Blowing" (#457954)

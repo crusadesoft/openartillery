@@ -151,7 +151,7 @@ export function PlayPage({ navigate }: Props): JSX.Element {
             Pick the biome, bots, max players, and visibility. Friends join
             from the browser or with an invite code.
           </div>
-          <div className="play-hero-cta">+ Open Lobby</div>
+          <div className="play-hero-cta">+ Create Lobby</div>
         </button>
       </div>
 

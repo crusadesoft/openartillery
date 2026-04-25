@@ -97,6 +97,13 @@ export function Lobby({
     else setNameDraft(lobbyName);
   };
 
+  useEffect(() => {
+    try {
+      Sound.init();
+      Sound.play("turn");
+    } catch { /* ignore */ }
+  }, []);
+
   // Beep once per second during the pre-match countdown.
   const lastBeepRef = useRef<number | null>(null);
   useEffect(() => {

@@ -45,8 +45,8 @@ export class TankView {
   private barrel: Phaser.GameObjects.Image;
   /** Offset from container origin (tank centre) to the barrel pivot
    *  in the +facing orientation. Negated in x for -facing. */
-  private barrelOffsetX = 0;
-  private barrelOffsetY = 0;
+  barrelOffsetX = 0;
+  barrelOffsetY = 0;
   private label: ReturnType<RexUI["add"]["label"]>;
   private hpBar: Phaser.GameObjects.Graphics;
   private turnRing: Phaser.GameObjects.Graphics;
@@ -221,6 +221,23 @@ export class TankView {
     this.container.destroy(true);
     this.label.destroy();
   }
+}
+
+/** Used by the cursor-preview overlay to mount a copy of the local
+ *  player's hull + barrel sprites without duplicating the texture
+ *  generation. Returns the cached texture metadata; the texture itself
+ *  was already added to the scene by TankView's constructor. */
+export function getTankPreviewTextures(
+  scene: Phaser.Scene,
+  p: Player,
+): { hull: HullMeta; barrel: BarrelMeta } {
+  return {
+    hull: ensureHullTexture(scene, p),
+    barrel: ensureBarrelTexture(
+      scene,
+      (p.barrelStyle || "standard") as BarrelStyle,
+    ),
+  };
 }
 
 // ─────────────── Texture cache ───────────────

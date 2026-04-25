@@ -82,10 +82,16 @@ export function MusicPlayer(): JSX.Element | null {
   }, [state]);
 
   // Lets the app's CSS push bottom UI (weapon tray, fire button, chat
-  // panel) above the docked bar so they don't get covered.
+  // panel) above the docked bar so they don't get covered. The Phaser
+  // host shrinks too, so dispatch a resize on toggle to make the scale
+  // manager repaint into the new bounds.
   useEffect(() => {
     document.documentElement.classList.toggle("mp-docked", state.mode === "docked");
-    return () => document.documentElement.classList.remove("mp-docked");
+    window.dispatchEvent(new Event("resize"));
+    return () => {
+      document.documentElement.classList.remove("mp-docked");
+      window.dispatchEvent(new Event("resize"));
+    };
   }, [state.mode]);
 
   useEffect(() => {

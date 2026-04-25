@@ -5,15 +5,35 @@ import { SfxButton } from "../ui/SfxButton";
 
 interface Props { navigate: (r: Route) => void; }
 
-export type ThemeId = "rust" | "desert" | "arctic" | "dusk" | "jungle";
+export type ConcreteThemeId = "rust" | "desert" | "arctic" | "dusk" | "jungle";
+export type ThemeId = ConcreteThemeId | "random";
+
+const CONCRETE_THEMES: readonly ConcreteThemeId[] = [
+  "rust", "desert", "arctic", "dusk", "jungle",
+] as const;
 
 export const THEMES: ReadonlyArray<{ id: ThemeId; label: string; blurb: string }> = [
-  { id: "rust",    label: "Rust",    blurb: "Oxidized metal · default" },
+  { id: "random",  label: "Random",  blurb: "Surprise — picks a different theme each visit" },
+  { id: "rust",    label: "Rust",    blurb: "Oxidized metal" },
   { id: "desert",  label: "Desert",  blurb: "Sun-bleached ochre" },
   { id: "arctic",  label: "Arctic",  blurb: "Cold steel · snow glare" },
   { id: "dusk",    label: "Dusk",    blurb: "Violet twilight" },
   { id: "jungle",  label: "Jungle",  blurb: "Olive canopy" },
 ];
+
+// Resolve "random" to a concrete theme once per session so the look stays
+// stable while the player navigates around — switching pages shouldn't
+// re-roll. New tab / hard refresh = new roll.
+let SESSION_RANDOM: ConcreteThemeId | null = null;
+function resolveTheme(stored: ThemeId): ConcreteThemeId {
+  if (stored !== "random") return stored;
+  if (!SESSION_RANDOM) {
+    SESSION_RANDOM = CONCRETE_THEMES[
+      Math.floor(Math.random() * CONCRETE_THEMES.length)
+    ]!;
+  }
+  return SESSION_RANDOM;
+}
 
 export interface StoredSettings {
   masterVolume: number;
@@ -34,7 +54,7 @@ const DEFAULTS: StoredSettings = {
   uiClicks: true,
   reduceMotion: false,
   cameraShake: true,
-  theme: "rust",
+  theme: "random",
 };
 
 const STORAGE_KEY = "artillery:settings";
@@ -56,7 +76,7 @@ export function saveSettings(s: StoredSettings): void {
   Sound.setSfxVolume(s.sfxVolume);
   Sound.setUiVolume(s.uiClicks ? s.uiVolume : 0);
   document.documentElement.dataset.reducedMotion = s.reduceMotion ? "1" : "0";
-  document.documentElement.dataset.theme = s.theme;
+  document.documentElement.dataset.theme = resolveTheme(s.theme);
 }
 
 export function applySettingsOnBoot(): void {

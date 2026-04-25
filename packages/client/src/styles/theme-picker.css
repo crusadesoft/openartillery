@@ -28,6 +28,30 @@
   border: 1px solid rgba(0,0,0,0.5);
   overflow: hidden;
 }
+.theme-swatch[data-theme-preview="random"] .theme-chip {
+  background:
+    conic-gradient(from 210deg,
+      #c14e2a 0deg,
+      #d49c4a 60deg,
+      #2c8aa6 130deg,
+      #6a3a82 200deg,
+      #4a7a32 270deg,
+      #c14e2a 360deg);
+  position: relative;
+}
+.theme-swatch[data-theme-preview="random"] .theme-chip::after {
+  content: "?";
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-display, monospace);
+  font-weight: 900;
+  font-size: 22px;
+  color: rgba(0, 0, 0, 0.85);
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.4);
+}
 .theme-swatch[data-theme-preview="rust"] .theme-chip {
   background:
     radial-gradient(ellipse at 50% 50%, transparent 40%, rgba(0,0,0,0.55) 100%),

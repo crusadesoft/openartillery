@@ -12,6 +12,7 @@ export interface SceneInit {
 
 export class PhaserGame {
   readonly game: Phaser.Game;
+  private resizeObserver: ResizeObserver | null = null;
 
   constructor(host: HTMLElement, room: Room<BattleState>) {
     this.game = new Phaser.Game({
@@ -52,9 +53,25 @@ export class PhaserGame {
     // battle without reaching through React refs. No effect on prod UX.
     (window as unknown as { __game?: unknown; __room?: unknown }).__game = this.game;
     (window as unknown as { __game?: unknown; __room?: unknown }).__room = room;
+
+    // Phaser's Scale.RESIZE mode listens to window.resize but doesn't
+    // reliably pick up parent-only changes (toggling the bottom UI
+    // bar / music dock shrinks #phaser-host without the window
+    // changing size). Without a refresh the canvas stays at its old
+    // size and CENTER_BOTH centres it, exposing the parent's bg as a
+    // dim band on the side or top. Watching the parent and calling
+    // scale.refresh() forces Phaser to rebuild the canvas to match.
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => {
+        try { this.game.scale.refresh(); } catch { /* destroyed */ }
+      });
+      this.resizeObserver.observe(host);
+    }
   }
 
   destroy(): void {
+    this.resizeObserver?.disconnect();
+    this.resizeObserver = null;
     this.game.destroy(true, false);
   }
 }

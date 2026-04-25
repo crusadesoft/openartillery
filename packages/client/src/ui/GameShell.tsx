@@ -47,6 +47,20 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
     };
   }, [room, phaserActive]);
 
+  // Reserve a strip at the bottom for in-battle UI so weapon tray / fire
+  // button / minimap / chat don't sit over the rendered terrain. CSS
+  // shrinks #phaser-host upward and any window resize makes Phaser
+  // recompute its viewport.
+  useEffect(() => {
+    if (phase !== "playing") return;
+    document.documentElement.classList.add("battle-active");
+    window.dispatchEvent(new Event("resize"));
+    return () => {
+      document.documentElement.classList.remove("battle-active");
+      window.dispatchEvent(new Event("resize"));
+    };
+  }, [phase]);
+
   // Ref-guarded so React StrictMode's double-mount doesn't double-register
   // the event listener (which was causing chat messages to appear twice).
   const wiredRef = useRef<Room<BattleState> | null>(null);
@@ -158,6 +172,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
 
       {phase === "playing" && (
         <>
+          <div className="battle-bottom-bar" aria-hidden />
           <TurnChip
             current={currentPlayer}
             isMyTurn={isMyTurn}

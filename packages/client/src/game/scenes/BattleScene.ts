@@ -13,7 +13,7 @@ import {
   WEAPONS,
 } from "@artillery/shared";
 import { Sound } from "../audio/Sound";
-import { TankView } from "../entities/Tank";
+import { TankView, getTankPreviewTextures } from "../entities/Tank";
 import { TerrainView } from "../entities/TerrainView";
 import { ProjectileView } from "../entities/ProjectileView";
 import { FireView } from "../entities/FireView";
@@ -53,6 +53,19 @@ export class BattleScene extends Phaser.Scene {
   private reticle!: Phaser.GameObjects.Graphics;
   private dragOverlay!: Phaser.GameObjects.Graphics;
   private lastArcGfx!: Phaser.GameObjects.Graphics;
+  private aimLabel?: Phaser.GameObjects.Text;
+  private cursorPreview?: {
+    container: Phaser.GameObjects.Container;
+    hull: Phaser.GameObjects.Image;
+    barrel: Phaser.GameObjects.Image;
+    barrelOffsetX: number;
+    barrelOffsetY: number;
+    loadoutKey: string;
+  };
+  private windEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
+  private cursorOnCanvas = false;
+  private cursorScreenX = 0;
+  private lowTimePlayedForTurn = false;
 
   /** World-space trajectory trace of the local player's last completed
    *  shot. Drawn as a faint dotted line during subsequent aim so the
@@ -124,10 +137,35 @@ export class BattleScene extends Phaser.Scene {
     this.reticle = this.add.graphics().setDepth(13);
     this.dragOverlay = this.add.graphics().setDepth(14).setScrollFactor(0);
 
+    this.windEmitter = this.add
+      .particles(0, 0, "spark", {
+        lifespan: 4500,
+        speedX: 0,
+        speedY: { min: -6, max: 6 },
+        scale: { start: 0.22, end: 0.06 },
+        alpha: { start: 0.55, end: 0 },
+        tint: [0xefe8d6, 0xd4ccb6, 0xb8af96],
+        blendMode: Phaser.BlendModes.NORMAL,
+        quantity: 1,
+        frequency: 80,
+        x: { min: 0, max: WORLD.WIDTH },
+        y: { min: 40, max: WORLD.HEIGHT - 80 },
+        emitting: false,
+      })
+      .setDepth(2);
+
     this.setupInput();
     this.wireRoom();
 
-    this.cameras.main.centerOn(WORLD.WIDTH / 2, WORLD.HEIGHT / 2);
+    // Snap straight to the local player on scene boot so the very
+    // first frame is centered on us, then defer to updateCamera /
+    // turn-event pans. Falls back to whoever's turn it is, then
+    // world-centre, if our tank isn't in state yet.
+    const me = this.room.state.players.get(this.room.sessionId);
+    const cur = this.room.state.players.get(this.room.state.currentTurnId);
+    const focal = me ?? cur;
+    if (focal) this.cameras.main.centerOn(focal.x, focal.y - 60);
+    else this.cameras.main.centerOn(WORLD.WIDTH / 2, WORLD.HEIGHT / 2);
   }
 
   override update(time: number, deltaMs: number): void {
@@ -156,6 +194,8 @@ export class BattleScene extends Phaser.Scene {
       view.maybeSync(pr);
       view.step(dt, this.room.state.wind);
     });
+    this.updateWindParticles();
+    this.checkLowTimeWarning();
     this.room.state.fires.forEach((f) => {
       const view = this.fires.get(f.id);
       if (view) view.sync(f);
@@ -166,6 +206,34 @@ export class BattleScene extends Phaser.Scene {
     this.renderAim();
     this.updateCamera(dt);
     this.updateSpeechBubbles(time);
+  }
+
+  private checkLowTimeWarning(): void {
+    if (this.lowTimePlayedForTurn) return;
+    if (!this.isMyTurn()) return;
+    const endsAt = this.room.state.turnEndsAt;
+    if (endsAt <= 0) return;
+    const remaining = endsAt - Date.now();
+    if (remaining > 0 && remaining <= 5000) {
+      Sound.play("low_time");
+      this.lowTimePlayedForTurn = true;
+    }
+  }
+
+  private updateWindParticles(): void {
+    const e = this.windEmitter;
+    const wind = this.room.state.wind;
+    const mag = Math.abs(wind);
+    const max = this.room.state.windMax || 25;
+    Sound.setWind(Math.min(1, mag / max));
+    if (!e) return;
+    if (mag < 0.5) {
+      if (e.emitting) e.stop();
+      return;
+    }
+    if (!e.emitting) e.start();
+    e.setParticleSpeed(wind * 14, undefined);
+    e.frequency = Math.max(20, 140 - mag * 4);
   }
 
   /** Appends the tracked projectile's current position to `activeArc`,
@@ -234,16 +302,22 @@ export class BattleScene extends Phaser.Scene {
 
     // Previous-shot aim arrow — drawn from the tank's position at the
     // time of firing, using the same geometry as the live aim arrow.
-    // Same off-white palette as the trace so it reads as one reference.
-    if (this.lastShot) {
+    // Suppressed while actively dragging so the player isn't comparing
+    // two arrows from slightly different anchor points.
+    if (this.lastShot && !this.dragging) {
       const { tankX, tankY, angle, power, facing } = this.lastShot;
       const barrelLen =
         TANK.BARREL_LENGTHS[self.barrelStyle] ?? TANK.BARREL_LENGTH;
       const angleRad = (angle * Math.PI) / 180;
       const dirX = Math.cos(angleRad) * facing;
       const dirY = -Math.sin(angleRad);
-      const baseX = tankX + TANK.BARREL_PIVOT_X * facing + dirX * barrelLen;
-      const baseY = tankY + TANK.BARREL_PIVOT_Y + dirY * barrelLen;
+      // Match the live arrow: read pivot from the rendered TankView so
+      // the historical arrow lands at the same place the new arrow does.
+      const view = this.tanks.get(this.room.sessionId);
+      const pivotX = view?.barrelOffsetX ?? TANK.BARREL_PIVOT_X;
+      const pivotY = view?.barrelOffsetY ?? TANK.BARREL_PIVOT_Y;
+      const baseX = tankX + pivotX * facing + dirX * barrelLen;
+      const baseY = tankY + pivotY + dirY * barrelLen;
       const powerT = Math.max(
         0,
         Math.min(1, (power - TANK.MIN_POWER) / (TANK.MAX_POWER - TANK.MIN_POWER)),
@@ -253,7 +327,6 @@ export class BattleScene extends Phaser.Scene {
       const tipY = baseY + dirY * arrowLen;
       this.lastArcGfx.lineStyle(2, color, 0.6);
       this.lastArcGfx.lineBetween(baseX, baseY, tipX, tipY);
-      // Arrowhead — triangle at the tip.
       const perpX = -dirY;
       const perpY = dirX;
       this.lastArcGfx.fillStyle(color, 0.7);
@@ -416,9 +489,13 @@ export class BattleScene extends Phaser.Scene {
       this.beginDrag(pointer);
     });
     this.input.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+      this.cursorOnCanvas = true;
+      this.cursorScreenX = pointer.x;
       if (!this.dragging) return;
       this.updateAimFromPointer(pointer);
     });
+    this.input.on("gameout", () => { this.cursorOnCanvas = false; });
+    this.input.on("gameover", () => { this.cursorOnCanvas = true; });
     const endDrag = (pointer: Phaser.Input.Pointer) => {
       if (!this.dragging) return;
       this.dragging = false;
@@ -597,6 +674,10 @@ export class BattleScene extends Phaser.Scene {
     this.aimLine.clear();
     this.reticle.clear();
     this.dragOverlay.clear();
+    if (!this.dragging) {
+      if (this.aimLabel) this.aimLabel.setVisible(false);
+      if (this.cursorPreview) this.cursorPreview.container.setVisible(false);
+    }
 
     if (!this.isMyTurn()) return;
     const self = this.room.state.players.get(this.room.sessionId);
@@ -611,65 +692,154 @@ export class BattleScene extends Phaser.Scene {
     const angleRad = (angleDeg * Math.PI) / 180;
     const dirX = Math.cos(angleRad) * facing;
     const dirY = -Math.sin(angleRad);
-    // Match the barrel sprite pivot so the arrow emerges from the muzzle,
-    // not the hull center. Must stay in sync with World.barrelTip().
-    // Use the player's actual barrel length so the aim arrow starts
-    // exactly at the muzzle tip instead of always using the standard
-    // length — otherwise sniper/long/stubby draw arrows inside or past
-    // their own barrel.
+    // Match the *rendered* barrel sprite pivot, not the server's
+    // physics constant — those drift apart per hull/turret combo
+    // because the texture pivot is computed from the rendered hull
+    // canvas. Reading from TankView guarantees the arrow exits the
+    // muzzle the player actually sees.
+    const view = this.tanks.get(this.room.sessionId);
+    const pivotX = view?.barrelOffsetX ?? TANK.BARREL_PIVOT_X;
+    const pivotY = view?.barrelOffsetY ?? TANK.BARREL_PIVOT_Y;
     const barrelLen =
       TANK.BARREL_LENGTHS[self.barrelStyle] ?? TANK.BARREL_LENGTH;
-    const baseX = self.x + TANK.BARREL_PIVOT_X * facing + dirX * barrelLen;
-    const baseY = self.y + TANK.BARREL_PIVOT_Y + dirY * barrelLen;
+    const baseX = self.x + pivotX * facing + dirX * barrelLen;
+    const baseY = self.y + pivotY + dirY * barrelLen;
 
-    // Short directional indicator only — no ballistic "cheat" preview.
-    // Length scales with power so the player gets feel for how much they
-    // charged, but no full-arc + impact circle.
     const powerT =
       (power - TANK.MIN_POWER) / (TANK.MAX_POWER - TANK.MIN_POWER);
+    const dense = this.dragging;
+    const perpX = -dirY;
+    const perpY = dirX;
+
+    if (!dense) {
+      // Idle: thin tracer of the current aim. No extra chrome.
+      const arrowLen = 40 + powerT * 90;
+      const tipX = baseX + dirX * arrowLen;
+      const tipY = baseY + dirY * arrowLen;
+      this.aimLine.lineStyle(2, 0xd49228, 0.6);
+      this.aimLine.beginPath();
+      this.aimLine.moveTo(baseX, baseY);
+      this.aimLine.lineTo(tipX, tipY);
+      this.aimLine.strokePath();
+      this.aimLine.fillStyle(0xd49228, 0.6);
+      this.aimLine.fillTriangle(
+        tipX + dirX * 8, tipY + dirY * 8,
+        tipX - dirX * 3 + perpX * 5, tipY - dirY * 3 + perpY * 5,
+        tipX - dirX * 3 - perpX * 5, tipY - dirY * 3 - perpY * 5,
+      );
+      return;
+    }
+
+    // Active drag: same scale as idle arrow, just thicker line and
+    // power-coloured tier tint. Keeps geometry consistent so it never
+    // jumps in size when drag begins.
     const arrowLen = 40 + powerT * 90;
     const tipX = baseX + dirX * arrowLen;
     const tipY = baseY + dirY * arrowLen;
-    const dense = this.dragging;
-
-    this.aimLine.lineStyle(
-      dense ? 3 : 2,
-      dense ? 0xffbe52 : 0xd49228,
-      dense ? 0.95 : 0.6,
-    );
+    const tier =
+      powerT > 0.9 ? 0xff5a3c :
+      powerT > 0.65 ? 0xff8a2a :
+      powerT > 0.35 ? 0xffbe52 : 0xf0e090;
+    this.aimLine.lineStyle(3, tier, 0.95);
     this.aimLine.beginPath();
     this.aimLine.moveTo(baseX, baseY);
     this.aimLine.lineTo(tipX, tipY);
     this.aimLine.strokePath();
-
-    // Small arrowhead on the tip.
-    const perpX = -dirY;
-    const perpY = dirX;
-    this.aimLine.fillStyle(dense ? 0xffbe52 : 0xd49228, dense ? 0.95 : 0.6);
+    this.aimLine.fillStyle(tier, 0.95);
     this.aimLine.fillTriangle(
       tipX + dirX * 8, tipY + dirY * 8,
       tipX - dirX * 3 + perpX * 5, tipY - dirY * 3 + perpY * 5,
       tipX - dirX * 3 - perpX * 5, tipY - dirY * 3 - perpY * 5,
     );
 
-    if (dense) {
-      const cam = this.cameras.main;
-      const sx = baseX - cam.scrollX;
-      const sy = baseY - cam.scrollY;
-      const barLen = 88;
-      this.dragOverlay.fillStyle(0x0b1020, 0.8);
-      this.dragOverlay.fillRect(sx - barLen / 2 - 2, sy - 28, barLen + 4, 10);
-      this.dragOverlay.fillStyle(
-        powerT > 0.9 ? 0xc03a3a : powerT > 0.6 ? 0xd49228 : 0xffbe52,
-        1,
-      );
-      this.dragOverlay.fillRect(
-        sx - barLen / 2,
-        sy - 26,
-        barLen * powerT,
-        6,
-      );
+    // Cursor tank preview — a mini copy of the local player's tank
+    // anchored at the pointer, with the barrel rotated to match the
+    // current aim. Reuses the in-game hull/barrel textures so colours,
+    // pattern, decal, and turret shape all match instantly.
+    const ptr = this.input.activePointer;
+    this.renderCursorPreview(self, ptr.x, ptr.y, angleDeg, facing, powerT, tier);
+  }
+
+  private renderCursorPreview(
+    self: Player,
+    cx: number,
+    cy: number,
+    angleDeg: number,
+    facing: -1 | 1,
+    powerT: number,
+    tier: number,
+  ): void {
+    const SCALE = 0.7;
+    const PREVIEW_OFFSET_Y = -12;
+
+    const loadoutKey =
+      `${self.bodyStyle}|${self.turretStyle}|${self.barrelStyle}|${self.color}|${self.accentColor}|${self.pattern}|${self.patternColor}|${self.decal}`;
+
+    let p = this.cursorPreview;
+    if (!p || p.loadoutKey !== loadoutKey) {
+      // Tear down any stale preview (loadout changed mid-match).
+      if (p) p.container.destroy(true);
+      const meta = getTankPreviewTextures(this, self);
+      const container = this.add.container(0, 0)
+        .setDepth(16)
+        .setScrollFactor(0);
+      const hull = this.add.image(0, 0, meta.hull.textureKey)
+        .setOrigin(
+          meta.hull.hullCenterX / meta.hull.widthLogical,
+          meta.hull.hullCenterY / meta.hull.heightLogical,
+        )
+        .setDisplaySize(meta.hull.widthLogical, meta.hull.heightLogical);
+      const barrelOffsetX = meta.hull.barrelPivotX - meta.hull.hullCenterX;
+      const barrelOffsetY = meta.hull.barrelPivotY - meta.hull.hullCenterY;
+      const barrel = this.add.image(barrelOffsetX, barrelOffsetY, meta.barrel.textureKey)
+        .setOrigin(
+          meta.barrel.pivotX / meta.barrel.widthLogical,
+          meta.barrel.pivotY / meta.barrel.heightLogical,
+        )
+        .setDisplaySize(meta.barrel.widthLogical, meta.barrel.heightLogical);
+      container.add([hull, barrel]);
+      p = { container, hull, barrel, barrelOffsetX, barrelOffsetY, loadoutKey };
+      this.cursorPreview = p;
     }
+
+    p.container.setVisible(true);
+    p.container.setPosition(cx, cy + PREVIEW_OFFSET_Y);
+    p.container.setScale(SCALE * facing, SCALE);
+    const angleRad = (angleDeg * Math.PI) / 180;
+    p.barrel.setRotation(-angleRad);
+
+    // Power ring drawn around the preview — faint full circle plus a
+    // bright arc filling clockwise as power climbs.
+    const ringR = 32;
+    this.dragOverlay.lineStyle(2, 0xffffff, 0.18);
+    this.dragOverlay.strokeCircle(cx, cy + PREVIEW_OFFSET_Y, ringR);
+    this.dragOverlay.lineStyle(3, tier, 0.9);
+    this.dragOverlay.beginPath();
+    this.dragOverlay.arc(
+      cx, cy + PREVIEW_OFFSET_Y, ringR,
+      -Math.PI / 2,
+      -Math.PI / 2 + powerT * Math.PI * 2,
+    );
+    this.dragOverlay.strokePath();
+
+    // Power % label below the ring — single readout, no overlap with
+    // arrow since the arrow now lives at the tank.
+    const txt = this.aimLabel ?? this.add
+      .text(0, 0, "", {
+        fontFamily: "JetBrains Mono, monospace",
+        fontSize: "12px",
+        color: "#ffffff",
+        backgroundColor: "rgba(11,16,32,0.9)",
+        padding: { left: 6, right: 6, top: 2, bottom: 2 },
+      })
+      .setDepth(17)
+      .setScrollFactor(0)
+      .setOrigin(0.5, 0);
+    this.aimLabel = txt;
+    txt.setText(`${Math.abs(angleDeg).toFixed(0)}°  ·  ${Math.round(powerT * 100)}%`);
+    txt.setColor(`#${tier.toString(16).padStart(6, "0")}`);
+    txt.setPosition(cx, cy + PREVIEW_OFFSET_Y + ringR + 6);
+    txt.setVisible(true);
   }
 
   private updateCamera(dt: number): void {
@@ -677,19 +847,51 @@ export class BattleScene extends Phaser.Scene {
     if (!target) return;
     const cam = this.cameras.main;
     const margin = 120;
-    const tx = Phaser.Math.Clamp(
-      target.x,
-      cam.width / 2 - margin,
-      WORLD.WIDTH - cam.width / 2 + margin,
-    );
     const ty = Phaser.Math.Clamp(
       target.y - 60,
       cam.height / 2 - margin,
       WORLD.HEIGHT - cam.height / 2 + margin,
     );
     const lerp = 1 - Math.pow(0.001, dt);
-    cam.scrollX += (tx - cam.width / 2 - cam.scrollX) * lerp;
     cam.scrollY += (ty - cam.height / 2 - cam.scrollY) * lerp;
+
+    const edgeDx = this.computeEdgeScrollDx(dt);
+    if (edgeDx !== 0) {
+      cam.scrollX = Phaser.Math.Clamp(
+        cam.scrollX + edgeDx,
+        0,
+        Math.max(0, WORLD.WIDTH - cam.width),
+      );
+      return;
+    }
+    // Free-roam: during the local player's own turn (and no projectile in
+    // flight) leave scrollX wherever the player parked it. Auto-follow
+    // would yank the camera back to the tank as soon as the cursor left
+    // the edge zone, which makes "look around" impossible.
+    if (this.isMyTurn() && this.room.state.projectiles.size === 0) return;
+
+    const tx = Phaser.Math.Clamp(
+      target.x,
+      cam.width / 2 - margin,
+      WORLD.WIDTH - cam.width / 2 + margin,
+    );
+    cam.scrollX += (tx - cam.width / 2 - cam.scrollX) * lerp;
+  }
+
+  private computeEdgeScrollDx(dt: number): number {
+    if (!this.isMyTurn()) return 0;
+    if (this.dragging) return 0;
+    if (!this.cursorOnCanvas) return 0;
+    if (this.room.state.projectiles.size > 0) return 0;
+    const cam = this.cameras.main;
+    const EDGE = 80;
+    const MAX_SPEED = 700;
+    const x = this.cursorScreenX;
+    if (x < EDGE) return -((EDGE - x) / EDGE) * MAX_SPEED * dt;
+    if (x > cam.width - EDGE) {
+      return ((x - (cam.width - EDGE)) / EDGE) * MAX_SPEED * dt;
+    }
+    return 0;
   }
 
   private pickCameraTarget(): { x: number; y: number } | null {
@@ -731,6 +933,7 @@ export class BattleScene extends Phaser.Scene {
     this.game.events.on("server-event", (evt: ServerEvent) => this.handleEvent(evt));
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.game.events.off("server-event");
+      Sound.setWind(0);
     });
   }
 
@@ -831,11 +1034,17 @@ export class BattleScene extends Phaser.Scene {
         this.time.delayedCall(900, () => em.destroy());
       }
     } else if (evt.type === "turn") {
+      this.lowTimePlayedForTurn = false;
       Sound.play("turn");
-      // A new turn starts fresh: re-enable arc tracking so the next shot
-      // we take overwrites the previously-displayed arc.
       if (evt.tankId === this.room.sessionId) {
+        this.time.delayedCall(180, () => Sound.play("turn"));
         this.arcCapturedThisTurn = false;
+        // Recenter on the local tank at turn start. Free-roam mode in
+        // updateCamera() blocks the auto-follow while it's our turn, so
+        // without this nudge the camera stays parked wherever the
+        // previous turn ended.
+        const me = this.room.state.players.get(this.room.sessionId);
+        if (me) this.cameras.main.pan(me.x, me.y - 60, 350, "Sine.easeOut");
       }
     } else if (evt.type === "gameOver") {
       Sound.play(evt.winnerId ? "turn" : "thud");
