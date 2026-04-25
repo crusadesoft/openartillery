@@ -125,10 +125,6 @@ export const ReadyMessage = z.object({
   ready: z.boolean(),
 });
 
-export const RematchMessage = z.object({
-  type: z.literal("rematch"),
-});
-
 export const AddBotMessage = z.object({
   type: z.literal("addBot"),
   difficulty: z
@@ -164,6 +160,21 @@ export const SetLobbyConfigMessage = z.object({
   visibility: z.enum(["public", "private"]).optional(),
   /** "" clears the password; otherwise up to 64 chars. */
   password: z.string().max(64).optional(),
+  teamMode: z.boolean().optional(),
+  teamCount: z.number().int().min(2).max(4).optional(),
+  friendlyFire: z.boolean().optional(),
+  ranked: z.boolean().optional(),
+});
+
+export const SetTeamMessage = z.object({
+  type: z.literal("setTeam"),
+  sessionId: z.string().min(1).max(64),
+  /** 0 = auto/?, 1..4 = explicit team. */
+  team: z.number().int().min(0).max(4),
+});
+
+export const ShuffleTeamsMessage = z.object({
+  type: z.literal("shuffleTeams"),
 });
 
 export const ClientMessageSchema = z.discriminatedUnion("type", [
@@ -174,12 +185,13 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   ChargeMessage,
   ReadyMessage,
   ChatMessage,
-  RematchMessage,
   AddBotMessage,
   RemoveBotMessage,
   SetBotDifficultyMessage,
   SetMatchSettingsMessage,
   SetLobbyConfigMessage,
+  SetTeamMessage,
+  ShuffleTeamsMessage,
 ]);
 
 export type ValidatedClientMessage = z.infer<typeof ClientMessageSchema>;

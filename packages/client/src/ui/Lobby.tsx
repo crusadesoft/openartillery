@@ -38,6 +38,12 @@ interface Props {
   fuelPerTurn: number;
   startingHp: number;
   windMax: number;
+  teamMode: boolean;
+  teamCount: number;
+  friendlyFire: boolean;
+  ranked: boolean;
+  /** True if any current player is a bot — disables ranked toggle. */
+  hasBots: boolean;
   chatEntries: ChatEntry[];
   onReadyToggle: () => void;
   onAddBot: (difficulty: string) => void;
@@ -45,6 +51,8 @@ interface Props {
   onSetBotDifficulty: (sessionId: string, difficulty: string) => void;
   onSettings: (patch: Partial<MatchSettings>) => void;
   onLobbyConfig: (patch: Partial<LobbyConfig>) => void;
+  onSetTeam: (sessionId: string, team: number) => void;
+  onShuffleTeams: () => void;
   onChat: (text: string) => void;
   onLeave: () => void;
 }
@@ -70,6 +78,11 @@ export function Lobby({
   fuelPerTurn,
   startingHp,
   windMax,
+  teamMode,
+  teamCount,
+  friendlyFire,
+  ranked,
+  hasBots,
   chatEntries,
   onReadyToggle,
   onAddBot,
@@ -77,6 +90,8 @@ export function Lobby({
   onSetBotDifficulty,
   onSettings,
   onLobbyConfig,
+  onSetTeam,
+  onShuffleTeams,
   onChat,
   onLeave,
 }: Props): JSX.Element {
@@ -131,7 +146,8 @@ export function Lobby({
   // Host-only controls: bot roster + lobby/match settings. Guests see the
   // roster but not the editing affordances. The server double-checks.
   const canTweakLobby = isCasual && phase === "waiting" && isHost;
-  const canAddBot = canTweakLobby && players.length < maxPlayers;
+  // Ranked rooms can't add bots — gate the button before the server bounces it.
+  const canAddBot = canTweakLobby && players.length < maxPlayers && !ranked;
   const canTweakSettings = canTweakLobby;
 
   return (
@@ -194,9 +210,13 @@ export function Lobby({
             maxPlayers={maxPlayers}
             canAddBot={canAddBot}
             canTweakSettings={canTweakSettings}
+            teamMode={teamMode}
+            teamCount={teamCount}
             onAddBot={onAddBot}
             onRemoveBot={onRemoveBot}
             onSetBotDifficulty={onSetBotDifficulty}
+            onSetTeam={onSetTeam}
+            onShuffleTeams={onShuffleTeams}
           />
         </aside>
 
@@ -230,7 +250,14 @@ export function Lobby({
                 fuelPerTurn={fuelPerTurn}
                 startingHp={startingHp}
                 windMax={windMax}
+                customTeams
+                teamMode={teamMode}
+                teamCount={teamCount}
+                friendlyFire={friendlyFire}
+                ranked={ranked}
+                rankedLocked={hasBots}
                 onSettings={onSettings}
+                onLobbyConfig={onLobbyConfig}
               />
             </>
           ) : (

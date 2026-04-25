@@ -3,7 +3,6 @@ import {
   Player,
   computeEloUpdates,
   DEFAULT_MMR,
-  MODES,
   type GameMode,
 } from "@artillery/shared";
 import { db, schema } from "../db/index.js";
@@ -11,6 +10,8 @@ import { logger } from "../logger.js";
 
 export interface PersistMatchInput {
   mode: GameMode;
+  /** Lobby's ranked toggle at match end — drives ELO + win/loss writes. */
+  ranked: boolean;
   startedAt: Date;
   endedAt: Date;
   winnerUserId: string | null;
@@ -28,7 +29,7 @@ export interface PersistMatchInput {
  */
 export async function persistMatch(input: PersistMatchInput): Promise<string> {
   const { mode, startedAt, endedAt, winnerUserId, summary, events } = input;
-  const ranked = MODES[mode].ranked && input.players.filter((p) => !p.bot).length >= 2;
+  const ranked = input.ranked && input.players.filter((p) => !p.bot).length >= 2;
 
   const playerIds = input.players.map((p) => p.id);
   const currentRatings = input.players.map((p) =>

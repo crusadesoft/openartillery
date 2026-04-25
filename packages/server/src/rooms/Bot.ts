@@ -216,8 +216,12 @@ export class BotBrain {
   private pickTarget(self: Player): Player | null {
     let best: Player | null = null;
     let bestScore = -Infinity;
+    const teamMode = this.world.state.teamMode;
     this.world.state.players.forEach((p) => {
       if (p.id === self.id || p.dead) return;
+      // In team mode, never deliberately aim at a teammate even when FF
+      // is on — keeps bots from owning the kill feed with own-goals.
+      if (teamMode && self.team !== 0 && p.team === self.team) return;
       // Prefer lower HP and nearer enemies.
       const dist = Math.hypot(p.x - self.x, p.y - self.y);
       const score = -dist - p.hp * 2;

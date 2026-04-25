@@ -8,6 +8,23 @@ export const TANK_COLORS = [
   0x5efff6, 0xff5ec8,
 ];
 
+/** Per-team palettes. Each palette must hold ≥ the largest supported
+ *  team size (4) so a fully-stacked team has unique tank colors. Hues
+ *  are kept far apart between teams so the battlefield reads at a
+ *  glance even at 2v2v2v2. */
+export const TEAM_A_COLORS = [0xff5e5e, 0xff7a5e, 0xff9d5e, 0xffb55e]; // warm reds/oranges
+export const TEAM_B_COLORS = [0x5ecfff, 0x5e9dff, 0x80c0ff, 0x5efff6]; // cool blues
+export const TEAM_C_COLORS = [0x8aff5e, 0x5eff8a, 0xb0ff80, 0x5edd5e]; // greens
+export const TEAM_D_COLORS = [0xcf5eff, 0xff5ec8, 0xa080ff, 0xff80e0]; // purples / magenta
+
+export const TEAM_PALETTES = [
+  TANK_COLORS,
+  TEAM_A_COLORS,
+  TEAM_B_COLORS,
+  TEAM_C_COLORS,
+  TEAM_D_COLORS,
+] as const;
+
 export const BOT_NAMES = [
   "xXxSn1per420xXx",
   "ur_mom_2007",

@@ -11,7 +11,7 @@ export function startMatchmakingMonitor(): void {
     try {
       const rooms = await matchMaker.query({ name: "battle" });
       for (const r of rooms) {
-        const mode = (r.metadata?.mode as GameMode | undefined) ?? "ffa";
+        const mode = (r.metadata?.mode as GameMode | undefined) ?? "custom";
         const spec = MODES[mode];
         if (!spec.botFillAfterMs || r.clients >= spec.minPlayers) continue;
         if (r.clients === 0) continue;

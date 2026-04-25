@@ -1,4 +1,4 @@
-export type GameMode = "ffa" | "duel" | "private" | "bots" | "custom";
+export type GameMode = "private" | "bots" | "custom";
 export type BotDifficulty = "easy" | "normal" | "hard" | "nightmare";
 
 export interface ModeSpec {
@@ -9,37 +9,20 @@ export interface ModeSpec {
   maxPlayers: number;
   /** fill with bots when queue exceeds this timeout (ms, 0 = never) */
   botFillAfterMs: number;
-  /** rated match (affects ELO) */
+  /** rated match (affects ELO) — now driven by the lobby's `state.ranked`
+   *  toggle instead of mode. Kept on the spec for legacy persisters. */
   ranked: boolean;
   /** spawn this many bots immediately on room creation */
   preloadedBots?: number;
 }
 
 export const MODES: Record<GameMode, ModeSpec> = {
-  ffa: {
-    id: "ffa",
-    label: "Free-for-All",
-    description: "Up to 6 tanks. Last one standing wins. Ranked.",
-    minPlayers: 2,
-    maxPlayers: 6,
-    botFillAfterMs: 0,
-    ranked: true,
-  },
-  duel: {
-    id: "duel",
-    label: "Duel",
-    description: "Head-to-head. Fills with a bot if queued too long.",
-    minPlayers: 2,
-    maxPlayers: 2,
-    botFillAfterMs: 20_000,
-    ranked: true,
-  },
   private: {
     id: "private",
     label: "Private Room",
-    description: "Invite-code room. Unranked; bring your own rules.",
+    description: "Invite-code room. Bring your own rules.",
     minPlayers: 1,
-    maxPlayers: 6,
+    maxPlayers: 8,
     botFillAfterMs: 0,
     ranked: false,
   },
@@ -48,7 +31,7 @@ export const MODES: Record<GameMode, ModeSpec> = {
     label: "Practice vs CPU",
     description: "Spawn AI opponents to practice. Unranked.",
     minPlayers: 1,
-    maxPlayers: 6,
+    maxPlayers: 8,
     botFillAfterMs: 0,
     ranked: false,
     preloadedBots: 2,
@@ -64,7 +47,7 @@ export const MODES: Record<GameMode, ModeSpec> = {
   },
 };
 
-export const ALL_MODES: GameMode[] = ["ffa", "duel", "bots", "private", "custom"];
+export const ALL_MODES: GameMode[] = ["custom", "private", "bots"];
 
 export const BOT_DIFFICULTIES: BotDifficulty[] = ["easy", "normal", "hard", "nightmare"];
 

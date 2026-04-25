@@ -19,6 +19,17 @@ export function applyBlastDamage(
   const owner = state.players.get(body.state.ownerId);
   state.players.forEach((p) => {
     if (p.dead) return;
+    // Team mode FF gate: with friendlyFire off, allies (other than self)
+    // are immune to splash damage and knockback. Self-damage still applies.
+    if (
+      !state.friendlyFire &&
+      state.teamMode &&
+      owner &&
+      owner.id !== p.id &&
+      owner.team !== 0 &&
+      owner.team === p.team
+    )
+      return;
     const dx = p.x - x;
     const dy = p.y - y;
     const dist = Math.hypot(dx, dy);
@@ -77,6 +88,16 @@ export function tickFires(
     meta.hitsRemaining -= 1;
     state.players.forEach((p) => {
       if (p.dead) return;
+      const owner = state.players.get(tile.ownerId);
+      if (
+        !state.friendlyFire &&
+        state.teamMode &&
+        owner &&
+        owner.id !== p.id &&
+        owner.team !== 0 &&
+        owner.team === p.team
+      )
+        return;
       const dx = p.x - tile.x;
       const dy = p.y - tile.y;
       if (Math.hypot(dx, dy) >= tile.radius + TANK.WIDTH / 2) return;
@@ -84,7 +105,6 @@ export function tickFires(
       const dmg = Math.max(1, Math.round(def.napalm?.damagePerSec ?? 10));
       const applied = Math.min(p.hp, dmg);
       p.hp = Math.max(0, p.hp - dmg);
-      const owner = state.players.get(tile.ownerId);
       if (owner && owner.id !== p.id) owner.damageDealt += applied;
       const killed = p.hp <= 0;
       if (killed) {

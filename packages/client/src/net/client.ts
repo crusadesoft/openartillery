@@ -120,22 +120,18 @@ export async function joinBattle(opts: JoinBattleOptions): Promise<Room<BattleSt
       }
       throw err;
     }
-  } else if (opts.create || opts.mode === "private" || opts.mode === "custom" || opts.mode === "bots") {
-    // Every casual lobby (public or private) gets an invite code so the
+  } else {
+    // Every lobby (public or private) gets an invite code so the
     // matchmaker's `filterBy(["mode","inviteCode"])` can index it for
     // later invite-based joins. Generating client-side lets us navigate
     // to the room before the server responds and keeps filterBy honest.
     const inviteCode = randomInviteCode();
     room = await c.create<BattleState>("battle", {
       ...joinOptions,
-      mode: "custom",
+      mode: opts.mode === "private" || opts.mode === "bots" ? opts.mode : "custom",
       inviteCode,
       ...(opts.visibility ? { visibility: opts.visibility } : {}),
     });
-  } else {
-    // Ranked (ffa / duel) quick-play — matches any open ranked room of the
-    // same mode, creates a new one otherwise.
-    room = await c.joinOrCreate<BattleState>("battle", joinOptions);
   }
 
   installRoom(room);

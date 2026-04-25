@@ -1,14 +1,21 @@
 import { useMemo } from "react";
 import type { Room } from "colyseus.js";
 import type { BattleState, Player } from "@artillery/shared";
-import { SfxButton } from "./SfxButton";
+import { teamLabel, teamTint } from "./lobby/teamMeta";
 
 interface Props {
   room: Room<BattleState>;
-  onLeave: () => void;
+  /** Seconds remaining until the room either resets to the lobby
+   *  (casual) or kicks the client back to /play (ranked). */
+  secondsLeft: number;
+  ranked: boolean;
 }
 
-export function MatchEndOverlay({ room, onLeave }: Props): JSX.Element {
+export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Element {
+  const teamMode = room.state.teamMode;
+  const teamCount = Math.max(2, room.state.teamCount || 2);
+  const winnerTeam = room.state.winnerTeam;
+  const winnerTeamNum = Number(winnerTeam) || 0;
   const winner = room.state.winnerId
     ? room.state.players.get(room.state.winnerId)
     : null;
@@ -22,7 +29,39 @@ export function MatchEndOverlay({ room, onLeave }: Props): JSX.Element {
     });
   }, [room.state.players]);
 
-  const rematch = () => room.send("rematch", {});
+  const tail = ranked
+    ? `Returning to menu in ${secondsLeft}s…`
+    : `Next round in ${secondsLeft}s…`;
+
+  if (teamMode) {
+    const headline = winnerTeamNum > 0 ? `${teamLabel(winnerTeamNum)} wins` : "Stalemate";
+    const teams: { team: number; roster: Player[] }[] = [];
+    for (let t = 1; t <= teamCount; t++) {
+      teams.push({ team: t, roster: sorted.filter((p) => p.team === t) });
+    }
+    return (
+      <div className="match-end">
+        <div className="panel">
+          <h1>{headline}</h1>
+          <p className="winner-line">
+            {winnerTeamNum > 0
+              ? "Last team standing."
+              : "Every team wiped on the same shot."}
+          </p>
+          {teams.map(({ team, roster }) => (
+            <TeamTable
+              key={team}
+              label={teamLabel(team)}
+              tint={teamTint(team)}
+              players={roster}
+              winning={winnerTeamNum === team}
+            />
+          ))}
+          <p className="winner-line" style={{ marginTop: 16 }}>{tail}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="match-end">
@@ -65,15 +104,69 @@ export function MatchEndOverlay({ room, onLeave }: Props): JSX.Element {
             ))}
           </tbody>
         </table>
-        <div className="row" style={{ marginTop: 20 }}>
-          <SfxButton className="go-btn" onClick={rematch}>
-            Rematch
-          </SfxButton>
-          <SfxButton className="danger-btn" onClick={onLeave}>
-            Leave
-          </SfxButton>
-        </div>
+        <p className="winner-line" style={{ marginTop: 16 }}>{tail}</p>
       </div>
+    </div>
+  );
+}
+
+interface TeamTableProps {
+  label: string;
+  tint: string;
+  players: Player[];
+  winning: boolean;
+}
+
+function TeamTable({ label, tint, players, winning }: TeamTableProps): JSX.Element {
+  const totalKills = players.reduce((n, p) => n + p.kills, 0);
+  const totalDmg = players.reduce((n, p) => n + p.damageDealt, 0);
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div
+        style={{
+          color: tint,
+          fontFamily: "var(--font-mono)",
+          fontSize: 12,
+          letterSpacing: "0.18em",
+          marginBottom: 6,
+          textTransform: "uppercase",
+        }}
+      >
+        {label} · {players.length} {winning ? "· WINNERS" : ""}
+      </div>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Player</th>
+            <th>Kills</th>
+            <th>Damage</th>
+            <th>Shots</th>
+          </tr>
+        </thead>
+        <tbody>
+          {players.map((p) => (
+            <tr key={p.id} className={winning ? "winner" : ""}>
+              <td>
+                {p.name}
+                {p.bot ? (
+                  <span style={{ color: "var(--ink-faint)" }}> · bot</span>
+                ) : (
+                  ""
+                )}
+              </td>
+              <td>{p.kills}</td>
+              <td>{Math.round(p.damageDealt)}</td>
+              <td>{p.shotsFired}</td>
+            </tr>
+          ))}
+          <tr style={{ opacity: 0.7 }}>
+            <td><strong>Team total</strong></td>
+            <td>{totalKills}</td>
+            <td>{Math.round(totalDmg)}</td>
+            <td>—</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
 }

@@ -9,10 +9,11 @@ export type ClientMessage =
   | { type: "charge"; charging: boolean } // legacy keyboard path
   | { type: "ready"; ready: boolean }
   | { type: "chat"; text: string }
-  | { type: "rematch" }
   | { type: "addBot"; difficulty?: string }
   | { type: "removeBot"; sessionId: string }
   | { type: "setBotDifficulty"; sessionId: string; difficulty: string }
+  | { type: "setTeam"; sessionId: string; team: number }
+  | { type: "shuffleTeams" }
   | {
       type: "setMatchSettings";
       turnDurationSec?: number;
@@ -27,6 +28,10 @@ export type ClientMessage =
       biome?: string;
       visibility?: "public" | "private";
       password?: string;
+      teamMode?: boolean;
+      teamCount?: number;
+      friendlyFire?: boolean;
+      ranked?: boolean;
     };
 
 /** Server → client one-off events (layered on top of schema patches). */
@@ -61,7 +66,6 @@ export const MESSAGE_KINDS = {
   CHARGE: "charge",
   READY: "ready",
   CHAT: "chat",
-  REMATCH: "rematch",
   ADD_BOT: "addBot",
   EVENT: "event",
 } as const;

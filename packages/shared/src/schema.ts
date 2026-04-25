@@ -33,6 +33,8 @@ export class Player extends Schema {
   @type("string") decal = "none";
   @type("number") patternColor = 0x1a140c;
   @type("number") facing = 1; // -1 or 1
+  /** 0 = unassigned (FFA / non-team mode), 1 = team A, 2 = team B. */
+  @type("uint8") team = 0;
   /** Remaining rounds per weapon. Unlimited weapons don't appear here. */
   @type({ map: "number" }) ammo = new MapSchema<number>();
 }
@@ -89,6 +91,13 @@ export class BattleState extends Schema {
   @type("number") wind = 0;
   @type("number") roundStartsAt = 0;
   @type("string") winnerId = "";
+  /** Set when team mode ends with a clear winning team. "" for FFA, draw, or in-progress. */
+  @type("string") winnerTeam = "";
+  @type("boolean") teamMode = false;
+  /** Number of distinct teams in team mode (2..4). 0 outside team mode. */
+  @type("uint8") teamCount = 0;
+  /** Splash damage on allies. Defaults true to match FFA semantics; only togglable in custom team lobbies. */
+  @type("boolean") friendlyFire = true;
   @type("number") matchStartedAt = 0;
   @type("number") matchEndedAt = 0;
   @type("number") turnNumber = 0;

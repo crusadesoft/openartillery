@@ -28,6 +28,14 @@ export interface RoomJoinOptions {
   visibility?: "public" | "private";
   /** Optional password for private rooms; required on join if host set one. */
   password?: string;
+  /** Only read on create: ranked match (no bots allowed, ELO applies). */
+  ranked?: boolean;
+  /** Only read on create: opt-in team mode for custom lobbies. */
+  teamMode?: boolean;
+  /** Only read on create: number of distinct teams (2..4) in custom team mode. */
+  teamCount?: number;
+  /** Only read on create: whether allies take splash damage in custom team mode. */
+  friendlyFire?: boolean;
   loadout?: {
     body: string;
     turret: string;
@@ -38,6 +46,10 @@ export interface RoomJoinOptions {
 }
 
 export const RECONNECT_GRACE_MS = 20_000;
+/** Recap window after a match ends: casual rooms reset to the lobby,
+ *  ranked clients return to the menu. Shared so the client countdown
+ *  can't drift away from the server's timer. */
+export const POST_MATCH_RECAP_MS = 7_000;
 export const MESSAGE_RATE_LIMIT = {
   /** max messages per rolling window */
   COUNT: 40,

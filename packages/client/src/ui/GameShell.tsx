@@ -6,7 +6,7 @@ import type {
   ServerEvent,
   WeaponId,
 } from "@artillery/shared";
-import { MODES, type GameMode } from "@artillery/shared";
+import { MODES, POST_MATCH_RECAP_MS, type GameMode } from "@artillery/shared";
 import { PhaserGame } from "../game/PhaserGame";
 import { ChatPanel } from "./ChatPanel";
 import { HudOverlay } from "./HudOverlay";
@@ -131,6 +131,29 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
 
   const inLobby = phase === "waiting" || phase === "countdown";
 
+  // Recap window: server resets casual rooms to "waiting" on its own;
+  // ranked clients have no in-room lobby to return to, so we leave to
+  // /play once the recap timer elapses. Anchored to matchEndedAt so a
+  // mid-match reload still lands at the right instant.
+  const ranked = room.state.ranked;
+  const matchEndedAt = room.state.matchEndedAt;
+  const recapEndsAt = matchEndedAt > 0 ? matchEndedAt + POST_MATCH_RECAP_MS : 0;
+  const recapMsLeft = recapEndsAt > 0 ? Math.max(0, recapEndsAt - Date.now()) : POST_MATCH_RECAP_MS;
+  const recapSecondsLeft = Math.ceil(recapMsLeft / 1000);
+
+  const leftRef = useRef(false);
+  useEffect(() => {
+    if (phase !== "ended" || !ranked) return;
+    if (recapEndsAt === 0) return;
+    const delay = Math.max(0, recapEndsAt - Date.now());
+    const id = window.setTimeout(() => {
+      if (leftRef.current) return;
+      leftRef.current = true;
+      onLeave();
+    }, delay);
+    return () => window.clearTimeout(id);
+  }, [phase, ranked, recapEndsAt, onLeave]);
+
   return (
     <div className="game-wrapper">
       {phaserActive && <div id="phaser-host" ref={phaserHostRef} />}
@@ -156,6 +179,11 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
           fuelPerTurn={room.state.fuelPerTurn || 100}
           startingHp={room.state.startingHp || 300}
           windMax={room.state.windMax || 25}
+          teamMode={room.state.teamMode}
+          teamCount={room.state.teamCount}
+          friendlyFire={room.state.friendlyFire}
+          ranked={room.state.ranked}
+          hasBots={players.some((p) => p.bot)}
           onReadyToggle={toggleReady}
           onAddBot={addBot}
           onRemoveBot={(sessionId) => room.send("removeBot", { sessionId })}
@@ -164,6 +192,8 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
           }
           onSettings={(patch) => room.send("setMatchSettings", patch)}
           onLobbyConfig={(patch) => room.send("setLobbyConfig", patch)}
+          onSetTeam={(sessionId, team) => room.send("setTeam", { sessionId, team })}
+          onShuffleTeams={() => room.send("shuffleTeams")}
           chatEntries={chat}
           onChat={sendChat}
           onLeave={onLeave}
@@ -187,6 +217,8 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
             self={self}
             currentTurnId={currentTurn}
             tick={tick}
+            teamMode={room.state.teamMode}
+            teamCount={room.state.teamCount}
           />
           <WeaponTray
             room={room}
@@ -206,7 +238,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
       )}
 
       {phase === "ended" && (
-        <MatchEndOverlay room={room} onLeave={onLeave} />
+        <MatchEndOverlay room={room} secondsLeft={recapSecondsLeft} ranked={ranked} />
       )}
 
       {!inLobby && <ChatPanel entries={chat} onSend={sendChat} />}

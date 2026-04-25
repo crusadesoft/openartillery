@@ -71,11 +71,6 @@ export function PlayPage({ navigate }: Props): JSX.Element {
     return true;
   };
 
-  const quickPlay = () => {
-    if (!ensureName()) return;
-    navigate({ name: "game", mode: "ffa" });
-  };
-
   const joinLobby = (roomId: string) => {
     if (!ensureName()) return;
     navigate({ name: "game", mode: "custom", roomId });
@@ -127,29 +122,15 @@ export function PlayPage({ navigate }: Props): JSX.Element {
 
       <div className="play-hero">
         <button
-          className="play-hero-card quick"
-          onClick={quickPlay}
-          type="button"
-        >
-          <div className="play-hero-eyebrow">01 · Fast Deploy</div>
-          <div className="play-hero-title">Quick Play · Ranked</div>
-          <div className="play-hero-blurb">
-            Jump into the matchmaker. Fills with bots if the queue's cold.
-            Wins and losses count.
-          </div>
-          <div className="play-hero-cta">▲ Deploy</div>
-        </button>
-
-        <button
           className="play-hero-card host"
           onClick={createLobby}
           type="button"
         >
-          <div className="play-hero-eyebrow">02 · Host a Room</div>
-          <div className="play-hero-title">Create Custom Lobby</div>
+          <div className="play-hero-eyebrow">01 · Host a Room</div>
+          <div className="play-hero-title">Create Lobby</div>
           <div className="play-hero-blurb">
-            Pick the biome, bots, max players, and visibility. Friends join
-            from the browser or with an invite code.
+            FFA, team battle, ranked or casual — host picks the rules. Players
+            pick their own team in the lobby; ranked rooms can't add bots.
           </div>
           <div className="play-hero-cta">+ Create Lobby</div>
         </button>
@@ -157,7 +138,7 @@ export function PlayPage({ navigate }: Props): JSX.Element {
 
       <section className="play-invite">
         <div className="play-invite-header">
-          <div className="play-section-eyebrow">03 · Got an Invite?</div>
+          <div className="play-section-eyebrow">02 · Got an Invite?</div>
           <div className="play-invite-tag">PRIVATE ROOMS</div>
         </div>
         <div className="play-invite-row">
@@ -206,7 +187,7 @@ export function PlayPage({ navigate }: Props): JSX.Element {
       <section className="play-lobbies">
         <header className="play-section-header">
           <div>
-            <div className="play-section-eyebrow">04 · Live Lobbies</div>
+            <div className="play-section-eyebrow">03 · Live Lobbies</div>
             <h2>Open Rooms</h2>
           </div>
           <div className="play-live-bar">

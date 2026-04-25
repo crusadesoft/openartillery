@@ -11,4 +11,8 @@ export interface LobbyConfig {
   biome: string;
   visibility: "public" | "private";
   password: string;
+  teamMode: boolean;
+  teamCount: number;
+  friendlyFire: boolean;
+  ranked: boolean;
 }

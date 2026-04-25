@@ -1,11 +1,14 @@
 import type { Player } from "@artillery/shared";
 import { TANK } from "@artillery/shared";
+import { teamLabel, teamTint } from "./lobby/teamMeta";
 
 interface Props {
   self: Player | undefined;
   players: Player[];
   currentTurnId: string;
   tick: number;
+  teamMode?: boolean;
+  teamCount?: number;
 }
 
 /**
@@ -13,12 +16,69 @@ interface Props {
  * lives in the drag overlay inside Phaser, and the weapon selection is in
  * the bottom tray — so the rest of the screen stays quiet.
  */
-export function HudOverlay({ self, players, currentTurnId, tick }: Props): JSX.Element {
+export function HudOverlay({
+  self,
+  players,
+  currentTurnId,
+  tick,
+  teamMode = false,
+  teamCount = 0,
+}: Props): JSX.Element {
   void tick;
   const scoreboard = [...players].sort((a, b) => b.kills - a.kills);
 
+  const teamPills: { team: number; alive: number }[] = [];
+  if (teamMode && teamCount >= 2) {
+    for (let t = 1; t <= teamCount; t++) {
+      teamPills.push({
+        team: t,
+        alive: players.filter((p) => p.team === t && !p.dead).length,
+      });
+    }
+  }
+
   return (
     <>
+      {teamPills.length > 0 && (
+        <div
+          style={{
+            position: "fixed",
+            top: 58,
+            left: "50%",
+            transform: "translateX(-50%)",
+            display: "flex",
+            flexWrap: "wrap",
+            justifyContent: "center",
+            gap: 8,
+            pointerEvents: "none",
+            zIndex: 5,
+            maxWidth: "min(620px, 90vw)",
+          }}
+        >
+          {teamPills.map(({ team, alive }) => {
+            const tint = teamTint(team);
+            return (
+              <div
+                key={team}
+                style={{
+                  padding: "4px 12px",
+                  borderRadius: 999,
+                  background: `${tint}22`,
+                  border: `1px solid ${tint}`,
+                  color: tint,
+                  fontFamily: "var(--font-mono)",
+                  fontSize: 12,
+                  letterSpacing: "0.12em",
+                  opacity: alive > 0 ? 1 : 0.45,
+                  textDecoration: alive > 0 ? "none" : "line-through",
+                }}
+              >
+                {teamLabel(team).toUpperCase()} · {alive} ALIVE
+              </div>
+            );
+          })}
+        </div>
+      )}
       <div className="hud-overlay" style={{ left: 16, top: 16, minWidth: 220 }}>
         <div className="label" style={{ marginBottom: 8 }}>Scoreboard</div>
         {scoreboard.map((p) => (

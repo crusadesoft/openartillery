@@ -24,7 +24,6 @@ export interface MessageHandlers {
     meta: { messages: number[]; chats: number[] },
     text: string,
   ) => void;
-  handleRematch: (client: Client) => void;
   handleAddBot: (client: Client, difficulty?: BotDifficulty) => void;
   handleRemoveBot: (client: Client, sessionId: string) => void;
   handleSetBotDifficulty: (
@@ -49,8 +48,14 @@ export interface MessageHandlers {
       biome?: string;
       visibility?: "public" | "private";
       password?: string;
+      teamMode?: boolean;
+      teamCount?: number;
+      friendlyFire?: boolean;
+      ranked?: boolean;
     },
   ) => void;
+  handleSetTeam: (client: Client, sessionId: string, team: number) => void;
+  handleShuffleTeams: (client: Client) => void;
 }
 
 /** Validates and routes a client message to the appropriate handler.
@@ -103,9 +108,6 @@ export function dispatchClientMessage(
     case "chat":
       handlers.handleChat(client, meta, msg.text);
       break;
-    case "rematch":
-      handlers.handleRematch(client);
-      break;
     case "addBot":
       handlers.handleAddBot(client, msg.difficulty as BotDifficulty | undefined);
       break;
@@ -124,6 +126,12 @@ export function dispatchClientMessage(
       break;
     case "setLobbyConfig":
       handlers.handleSetLobbyConfig(client, msg);
+      break;
+    case "setTeam":
+      handlers.handleSetTeam(client, msg.sessionId, msg.team);
+      break;
+    case "shuffleTeams":
+      handlers.handleShuffleTeams(client);
       break;
   }
 }

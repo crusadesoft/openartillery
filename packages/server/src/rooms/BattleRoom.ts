@@ -12,6 +12,7 @@ import {
   MODES,
   NETWORK,
   Player,
+  POST_MATCH_RECAP_MS,
   RECONNECT_GRACE_MS,
   type GameMode,
   type RoomJoinOptions,
@@ -30,6 +31,7 @@ import { matchesFinished, matchesStarted } from "../metrics.js";
 import { persistMatch } from "../match/persist.js";
 import {
   TANK_COLORS,
+  TEAM_PALETTES,
   clamp,
   generateInviteCode,
   pickBotName,
@@ -56,7 +58,7 @@ interface RoomOptions extends RoomJoinOptions {
 export class BattleRoom extends Room<BattleState> {
   override maxClients = 6;
 
-  private mode: GameMode = "ffa";
+  private mode: GameMode = "custom";
   private world!: World;
   private sessions = new Map<string, SessionMeta>();
   private turnOrder: string[] = [];
@@ -67,28 +69,30 @@ export class BattleRoom extends Room<BattleState> {
   private matchStartedAtMs = 0;
   private eventLog: Array<Record<string, unknown>> = [];
   private persisted = false;
-  private rematchVotes = new Set<string>();
+  /** Scheduled auto-transition out of the `ended` recap phase.
+   *  Casual rooms reset to `waiting`; ranked rooms let clients leave. */
+  private postMatchTimer?: NodeJS.Timeout;
   /** true once the current turn's tank has fired — blocks spam. */
   private turnFired = false;
   /** Tracks the most recent shot until projectiles resolve, so we can
    *  fire a miss taunt if nobody got hit. `bot` distinguishes self-roast
    *  (bot whiffs) from peanut-gallery (human whiffs and a bot mocks). */
   private pendingShot: { id: string; bot: boolean; hit: boolean } | null = null;
-  private initialOptions: RoomOptions = { mode: "ffa", username: "Player" };
+  private initialOptions: RoomOptions = { mode: "custom", username: "Player" };
   /** Optional join gate for private rooms. Stored only on the instance —
    *  never written to state — so it doesn't leak through schema patches. */
   private password: string | null = null;
 
-  override async onCreate(options: RoomOptions = { mode: "ffa", username: "Player" }) {
+  override async onCreate(options: RoomOptions = { mode: "custom", username: "Player" }) {
     this.initialOptions = options;
-    const mode = (options.mode as GameMode) in MODES ? (options.mode as GameMode) : "ffa";
+    const mode = (options.mode as GameMode) in MODES ? (options.mode as GameMode) : "custom";
     this.mode = mode;
     const spec = MODES[mode];
-    // Ranked modes lock the cap to the mode spec for fairness; casual
-    // modes (custom/private/bots) let the host pick 2–6.
-    const casual = mode === "custom" || mode === "private" || mode === "bots";
+    // Every room is host-configurable now; ranked is a lobby toggle, not
+    // a separate mode. Cap can be tweaked up to the mode spec's max.
+    const casual = true;
     const requestedMax = casual ? Number(options.maxPlayers ?? spec.maxPlayers) : spec.maxPlayers;
-    const maxPlayers = clamp(
+    let maxPlayers = clamp(
       Number.isFinite(requestedMax) ? requestedMax : spec.maxPlayers,
       Math.max(2, spec.minPlayers),
       spec.maxPlayers,
@@ -114,8 +118,16 @@ export class BattleRoom extends Room<BattleState> {
     this.state.phase = "waiting";
     this.state.lobbyName = lobbyName;
     this.state.visibility = visibility;
-    this.state.ranked = spec.ranked;
+    // `state.ranked` is a host-mutable lobby toggle. Defaults to off; the
+    // host flips it from the lobby settings panel. Ranked rooms reject bots.
+    this.state.ranked = options.ranked === true;
     this.state.maxPlayers = maxPlayers;
+
+    if (options.teamMode) {
+      this.state.teamMode = true;
+      this.state.teamCount = clamp(Number(options.teamCount ?? 2), 2, 4);
+      this.state.friendlyFire = options.friendlyFire ?? true;
+    }
 
     if (casual) {
       // Every casual lobby gets an invite code so the matchmaker's
@@ -177,6 +189,7 @@ export class BattleRoom extends Room<BattleState> {
 
   override onDispose(): void {
     if (this.simInterval) clearInterval(this.simInterval);
+    if (this.postMatchTimer) clearTimeout(this.postMatchTimer);
   }
 
   override async onAuth(_client: Client, options: RoomOptions): Promise<boolean> {
@@ -210,7 +223,10 @@ export class BattleRoom extends Room<BattleState> {
     p.hp = this.state.startingHp > 0 ? this.state.startingHp : TANK.MAX_HP;
     p.fuel = this.state.fuelPerTurn >= 0 ? this.state.fuelPerTurn : TURN.FUEL_PER_TURN;
     p.weapon = DEFAULT_LOADOUT[0]!;
-    p.color = this.nextTankColor();
+    // Default to team 0 ("?" — auto). Players pick their own team via
+    // the lobby team box, or stay on ? and let startMatch auto-balance.
+    p.team = 0;
+    p.color = this.nextTankColor(p.team);
     p.angle = 45;
     // Apply saved loadout (client sends via join options — also persists
     // server-side for authed users via /api/me/loadout).
@@ -219,7 +235,11 @@ export class BattleRoom extends Room<BattleState> {
         | Record<string, unknown>
         | undefined,
     );
-    p.color = loadout.primaryColor || p.color;
+    // Team mode locks tank color to the team palette so allies/enemies
+    // are unmistakable at a glance. Other cosmetics still apply.
+    if (!this.state.teamMode) {
+      p.color = loadout.primaryColor || p.color;
+    }
     p.accentColor = loadout.accentColor;
     p.bodyStyle = loadout.body;
     p.turretStyle = loadout.turret;
@@ -228,7 +248,7 @@ export class BattleRoom extends Room<BattleState> {
     p.decal = loadout.decal;
     p.patternColor = loadout.patternColor;
     this.initAmmo(p);
-    const spawnX = this.pickSpawnX();
+    const spawnX = this.pickSpawnX(p);
     p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
     this.world.spawnTankAt(p, spawnX);
     this.state.players.set(client.sessionId, p);
@@ -357,7 +377,7 @@ export class BattleRoom extends Room<BattleState> {
     this.state.fires.clear();
     this.world = new World(this.state, newSeed, biome);
     this.state.players.forEach((p) => {
-      const spawnX = this.pickSpawnX();
+      const spawnX = this.pickSpawnX(p);
       p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
       this.world.spawnTankAt(p, spawnX);
     });
@@ -390,6 +410,11 @@ export class BattleRoom extends Room<BattleState> {
       biome?: string;
       visibility?: "public" | "private";
       password?: string;
+      teamMode?: boolean;
+      teamCount?: number;
+      teamSize?: number;
+      friendlyFire?: boolean;
+      ranked?: boolean;
     },
   ): void {
     if (this.state.phase !== "waiting") return;
@@ -397,16 +422,79 @@ export class BattleRoom extends Room<BattleState> {
     if (client.sessionId !== this.state.hostSessionId) return;
 
     let terrainDirty = false;
+    const cap = MODES[this.mode].maxPlayers;
     if (typeof msg.lobbyName === "string") {
       this.state.lobbyName = sanitizeLobbyName(msg.lobbyName, undefined);
     }
+    if (typeof msg.friendlyFire === "boolean") {
+      this.state.friendlyFire = msg.friendlyFire;
+    }
+    if (typeof msg.ranked === "boolean" && msg.ranked !== this.state.ranked) {
+      // Going ranked requires no bots in the room. Block the toggle if
+      // bots are present so the host explicitly removes them first.
+      if (msg.ranked) {
+        const hasBots = Array.from(this.state.players.values()).some((p) => p.bot);
+        if (hasBots) {
+          this.broadcastEvent({
+            type: "chat",
+            name: "server",
+            text: "Remove bots before enabling ranked.",
+            at: Date.now(),
+          });
+        } else {
+          this.state.ranked = true;
+        }
+      } else {
+        this.state.ranked = false;
+      }
+    }
+    let teamModeFlipped = false;
+    let teamCountChanged = false;
+    if (typeof msg.teamMode === "boolean" && msg.teamMode !== this.state.teamMode) {
+      this.state.teamMode = msg.teamMode;
+      if (msg.teamMode) {
+        if (!this.state.teamCount) this.state.teamCount = 2;
+      } else {
+        this.state.teamCount = 0;
+      }
+      teamModeFlipped = true;
+    }
+    if (
+      this.state.teamMode &&
+      msg.teamCount != null &&
+      Number.isFinite(Number(msg.teamCount))
+    ) {
+      const newCount = clamp(Number(msg.teamCount), 2, 4);
+      if (newCount !== this.state.teamCount) {
+        this.state.teamCount = newCount;
+        teamCountChanged = true;
+      }
+    }
     if (msg.maxPlayers != null) {
-      const cap = MODES[this.mode].maxPlayers;
       const newMax = clamp(Number(msg.maxPlayers), 2, cap);
       if (newMax >= this.state.players.size) {
         this.state.maxPlayers = newMax;
         this.maxClients = newMax;
       }
+    }
+    if (teamModeFlipped) {
+      // Whether toggling on or off, everyone starts at "?". Players opt
+      // into a specific team via their own team box; auto-balance kicks
+      // in at startMatch for any leftover ?s.
+      this.state.players.forEach((p) => {
+        p.team = 0;
+        p.color = this.nextTankColor(0);
+      });
+    } else if (teamCountChanged) {
+      // Dropping teamCount can leave players on a now-invalid team —
+      // bump them back to "?" so they re-pick within the new range.
+      const tc = this.state.teamCount;
+      this.state.players.forEach((p) => {
+        if (p.team > tc) {
+          p.team = 0;
+          p.color = this.nextTankColor(0);
+        }
+      });
     }
     if (typeof msg.biome === "string") {
       // "random" flags the biome as a mystery — stays hidden until the
@@ -601,30 +689,99 @@ export class BattleRoom extends Room<BattleState> {
     });
   }
 
-  handleRematch(client: Client): void {
-    if (this.state.phase !== "ended") return;
-    this.rematchVotes.add(client.sessionId);
-    const humans = Array.from(this.state.players.values()).filter(
-      (p) => !p.bot,
-    );
-    if (humans.every((p) => this.rematchVotes.has(p.id))) {
-      this.startRematch();
-    } else {
-      this.broadcastEvent({
-        type: "chat",
-        name: "server",
-        text: `Rematch: ${this.rematchVotes.size}/${humans.length}`,
-        at: Date.now(),
-      });
+  handleSetTeam(client: Client, sessionId: string, team: number): void {
+    if (this.state.phase !== "waiting") return;
+    if (!this.state.teamMode) return;
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    // A player owns their own team box. Bots can't pick for themselves,
+    // so the host has authority over bot rows.
+    const isSelf = client.sessionId === sessionId;
+    const isHostMovingBot =
+      p.bot && client.sessionId === this.state.hostSessionId;
+    if (!isSelf && !isHostMovingBot) return;
+    const tc = Math.max(2, this.state.teamCount || 2);
+    const next = Math.max(0, Math.min(tc, Math.floor(team)));
+    if (p.team === next) return;
+    p.team = next;
+    p.color = this.nextTankColor(p.team);
+    const spawnX = this.pickSpawnX(p);
+    p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+    this.world.spawnTankAt(p, spawnX);
+  }
+
+  handleShuffleTeams(client: Client): void {
+    if (!this.isCasualLobby()) return;
+    if (this.state.phase !== "waiting") return;
+    if (client.sessionId !== this.state.hostSessionId) return;
+    if (!this.state.teamMode) return;
+    this.shuffleTeams();
+  }
+
+  /** Re-roll all team assignments from scratch, distributing round-robin
+   *  across the configured teamCount. Re-rolls colors + spawns so the
+   *  visual state matches. */
+  private shuffleTeams(): void {
+    const tc = Math.max(2, this.state.teamCount || 2);
+    const ids = Array.from(this.state.players.keys());
+    shuffle(ids);
+    ids.forEach((id, i) => {
+      const p = this.state.players.get(id);
+      if (!p) return;
+      p.team = (i % tc) + 1;
+      p.color = this.nextTankColor(p.team);
+      const spawnX = this.pickSpawnX(p);
+      p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+      this.world.spawnTankAt(p, spawnX);
+    });
+  }
+
+  /** Walk all players with team=0 ("?") and assign them to whichever
+   *  team currently has the fewest committed members. Used at match
+   *  start so unassigned players get folded into balanced teams. */
+  private resolveAutoTeams(): void {
+    const tc = Math.max(2, this.state.teamCount || 2);
+    const counts = new Array<number>(tc + 1).fill(0);
+    this.state.players.forEach((p) => {
+      if (p.team >= 1 && p.team <= tc) counts[p.team]! += 1;
+    });
+    const unassigned: string[] = [];
+    this.state.players.forEach((p) => {
+      if (p.team === 0) unassigned.push(p.id);
+    });
+    shuffle(unassigned);
+    for (const id of unassigned) {
+      const p = this.state.players.get(id);
+      if (!p) continue;
+      let minCount = Infinity;
+      const candidates: number[] = [];
+      for (let t = 1; t <= tc; t++) {
+        const c = counts[t]!;
+        if (c < minCount) {
+          minCount = c;
+          candidates.length = 0;
+          candidates.push(t);
+        } else if (c === minCount) {
+          candidates.push(t);
+        }
+      }
+      const pick = candidates[Math.floor(Math.random() * candidates.length)]!;
+      p.team = pick;
+      counts[pick]! += 1;
+      p.color = this.nextTankColor(p.team);
+      const spawnX = this.pickSpawnX(p);
+      p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
+      this.world.spawnTankAt(p, spawnX);
     }
   }
 
   handleAddBot(client: Client, difficulty?: BotDifficulty): void {
-    // Casual lobbies only; ranked queues fill themselves via Matchmaking.ts.
     if (!this.isCasualLobby()) return;
     if (this.state.phase !== "waiting") return;
     if (client.sessionId !== this.state.hostSessionId) return;
     if (this.state.players.size >= this.state.maxPlayers) return;
+    // Ranked rooms can't have bots — that's the whole point of the toggle.
+    if (this.state.ranked) return;
     this.addBot(difficulty ?? "normal");
   }
 
@@ -666,11 +823,14 @@ export class BattleRoom extends Room<BattleState> {
     p.hp = this.state.startingHp > 0 ? this.state.startingHp : TANK.MAX_HP;
     p.fuel = this.state.fuelPerTurn >= 0 ? this.state.fuelPerTurn : TURN.FUEL_PER_TURN;
     p.weapon = DEFAULT_LOADOUT[0]!;
-    p.color = this.nextTankColor();
+    // Bots default to team 0 like humans; the host picks their team via
+    // the lobby team box, or startMatch auto-assigns at kickoff.
+    p.team = 0;
+    p.color = this.nextTankColor(p.team);
     p.angle = 45;
     p.ready = true;
     this.initAmmo(p);
-    const spawnX = this.pickSpawnX();
+    const spawnX = this.pickSpawnX(p);
     p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
     this.world.spawnTankAt(p, spawnX);
     this.state.players.set(sessionId, p);
@@ -701,20 +861,76 @@ export class BattleRoom extends Room<BattleState> {
     }
   }
 
-  private nextTankColor(): number {
+  private nextTankColor(team: number = 0): number {
+    // team 0 falls through to the FFA palette; teams 1..4 use their
+    // dedicated palettes. Out-of-range team ids fall back to FFA so a
+    // bad value can't crash the picker.
+    const palette =
+      team >= 1 && team < TEAM_PALETTES.length
+        ? TEAM_PALETTES[team]!
+        : TANK_COLORS;
     const used = new Set<number>();
     this.state.players.forEach((p) => used.add(p.color));
-    for (const c of TANK_COLORS) if (!used.has(c)) return c;
-    return TANK_COLORS[this.state.players.size % TANK_COLORS.length]!;
+    for (const c of palette) if (!used.has(c)) return c;
+    return palette[this.state.players.size % palette.length]!;
   }
 
-  private pickSpawnX(): number {
+  /** Pick a team for a freshly-joined player so rosters stay balanced.
+   *  No-op outside team mode. Smallest team wins; ties broken randomly. */
+  private assignTeam(p: Player): void {
+    if (!this.state.teamMode) {
+      p.team = 0;
+      return;
+    }
+    const tc = Math.max(2, this.state.teamCount || 2);
+    const counts = new Array<number>(tc + 1).fill(0); // index 1..tc used
+    this.state.players.forEach((q) => {
+      if (q.id === p.id) return;
+      if (q.team >= 1 && q.team <= tc) counts[q.team]! += 1;
+    });
+    let minCount = Infinity;
+    const candidates: number[] = [];
+    for (let t = 1; t <= tc; t++) {
+      const c = counts[t]!;
+      if (c < minCount) {
+        minCount = c;
+        candidates.length = 0;
+        candidates.push(t);
+      } else if (c === minCount) {
+        candidates.push(t);
+      }
+    }
+    p.team = candidates[Math.floor(Math.random() * candidates.length)]!;
+  }
+
+  private pickSpawnX(p?: Player): number {
     const placed: number[] = [];
-    this.state.players.forEach((p) => placed.push(p.x));
+    this.state.players.forEach((q) => {
+      if (p && q.id === p.id) return;
+      placed.push(q.x);
+    });
+    // Team mode carves the map into equal-width strips so each team
+    // spawns in its own corridor. With N teams the strip is WORLD/N
+    // wide; the inset keeps tanks off the absolute edge.
+    let lo = 150;
+    let hi = WORLD.WIDTH - 150;
+    if (p && this.state.teamMode && p.team >= 1) {
+      const tc = Math.max(2, this.state.teamCount || 2);
+      if (p.team <= tc) {
+        const stripeWidth = WORLD.WIDTH / tc;
+        const idx = p.team - 1;
+        const inset = Math.min(100, stripeWidth * 0.15);
+        lo = idx * stripeWidth + inset;
+        hi = (idx + 1) * stripeWidth - inset;
+      }
+    }
     const minSpacing = 200;
     for (let attempt = 0; attempt < 12; attempt++) {
-      const x = 150 + Math.random() * (WORLD.WIDTH - 300);
+      const x = lo + Math.random() * (hi - lo);
       if (placed.every((px) => Math.abs(px - x) >= minSpacing)) return x;
+    }
+    if (p && this.state.teamMode && p.team !== 0) {
+      return (lo + hi) / 2;
     }
     const slot = this.state.players.size + 1;
     const total = slot + 1;
@@ -729,6 +945,11 @@ export class BattleRoom extends Room<BattleState> {
       this.state.players.forEach((p) => (p.ready = false));
       this.refreshMetadata();
       return;
+    }
+    // Resolve any "?" (team=0) players before kickoff. Auto-fills the
+    // smaller teams so anyone who left it on auto lands on a balanced side.
+    if (this.state.teamMode) {
+      this.resolveAutoTeams();
     }
     // Mystery biome? Resolve now — re-roll terrain so the first thing
     // anyone sees at phase flip is the real map.
@@ -977,12 +1198,29 @@ export class BattleRoom extends Room<BattleState> {
   private checkWin(): void {
     if (this.state.phase !== "playing") return;
     const alive = Array.from(this.state.players.values()).filter((p) => !p.dead);
+    if (this.state.teamMode) {
+      if (this.state.players.size <= 1) return;
+      const teamsAlive = new Set<number>();
+      for (const p of alive) teamsAlive.add(p.team);
+      if (teamsAlive.size === 0) {
+        // Mutual annihilation in a single tick — call it a draw.
+        this.endMatch(null, 0);
+      } else if (teamsAlive.size === 1) {
+        const winningTeam = [...teamsAlive][0]!;
+        const champ = alive.find((p) => p.team === winningTeam) ?? null;
+        this.endMatch(champ?.id ?? null, winningTeam);
+      }
+      return;
+    }
     if (alive.length <= 1 && this.state.players.size > 1) {
-      this.endMatch(alive[0]?.id ?? null);
+      this.endMatch(alive[0]?.id ?? null, 0);
     }
   }
 
-  private endMatch(winnerSessionId: string | null): void {
+  private endMatch(
+    winnerSessionId: string | null,
+    winnerTeam: number = 0,
+  ): void {
     if (this.state.phase === "ended") return;
     this.state.phase = "ended";
     this.state.matchEndedAt = Date.now();
@@ -990,6 +1228,7 @@ export class BattleRoom extends Room<BattleState> {
       ? this.state.players.get(winnerSessionId)
       : null;
     this.state.winnerId = winner?.id ?? "";
+    this.state.winnerTeam = winnerTeam ? String(winnerTeam) : "";
     this.broadcastEvent({ type: "gameOver", winnerId: winner?.id ?? null });
     if (winner?.bot) {
       this.botSay(winner, pick(BOT_LINES.on_victory));
@@ -1002,25 +1241,51 @@ export class BattleRoom extends Room<BattleState> {
     this.persistFinishedMatch(winner ?? null).catch((err) =>
       logger.error({ err }, "persist match failed"),
     );
+    // Casual lobbies auto-recycle to `waiting` after the recap window so the
+    // host's configured room (name, settings, bots) survives between rounds.
+    // Ranked rooms have no in-room lobby — clients leave themselves.
+    if (this.postMatchTimer) clearTimeout(this.postMatchTimer);
+    if (this.isCasualLobby()) {
+      this.postMatchTimer = setTimeout(() => {
+        this.postMatchTimer = undefined;
+        if (this.state.phase !== "ended") return;
+        const humans = Array.from(this.state.players.values()).filter(
+          (p) => !p.bot,
+        );
+        if (humans.length === 0) return;
+        this.startNextRound();
+      }, POST_MATCH_RECAP_MS);
+      this.postMatchTimer.unref?.();
+    }
   }
 
   private async persistFinishedMatch(winner: Player | null): Promise<void> {
     if (this.persisted) return;
     this.persisted = true;
     const players = Array.from(this.state.players.values());
-    const placements: number[] = players.map((p) =>
-      winner && p.id === winner.id ? 0 : 1,
-    );
-    const nonWinners = players
-      .map((p, i) => ({ p, i }))
-      .filter(({ p }) => !winner || p.id !== winner.id)
-      .sort((a, b) => b.p.damageDealt - a.p.damageDealt);
-    nonWinners.forEach(({ i }, rank) => {
-      placements[i] = winner ? rank + 1 : rank;
-    });
+    let placements: number[];
+    if (this.state.teamMode) {
+      const winningTeam = Number(this.state.winnerTeam);
+      if (!winningTeam) {
+        // Draw — every participant ties at placement 0 → zero ELO movement.
+        placements = players.map(() => 0);
+      } else {
+        placements = players.map((p) => (p.team === winningTeam ? 0 : 1));
+      }
+    } else {
+      placements = players.map((p) => (winner && p.id === winner.id ? 0 : 1));
+      const nonWinners = players
+        .map((p, i) => ({ p, i }))
+        .filter(({ p }) => !winner || p.id !== winner.id)
+        .sort((a, b) => b.p.damageDealt - a.p.damageDealt);
+      nonWinners.forEach(({ i }, rank) => {
+        placements[i] = winner ? rank + 1 : rank;
+      });
+    }
     try {
       await persistMatch({
         mode: this.mode,
+        ranked: this.state.ranked,
         startedAt: new Date(this.matchStartedAtMs || Date.now()),
         endedAt: new Date(),
         winnerUserId: winner?.userId ? winner.userId : null,
@@ -1039,8 +1304,7 @@ export class BattleRoom extends Room<BattleState> {
     }
   }
 
-  private startRematch(): void {
-    this.rematchVotes.clear();
+  private startNextRound(): void {
     this.persisted = false;
     this.eventLog = [];
     this.state.phase = "waiting";
@@ -1048,7 +1312,9 @@ export class BattleRoom extends Room<BattleState> {
     this.state.matchStartedAt = 0;
     this.state.matchEndedAt = 0;
     this.state.turnNumber = 0;
-    // New terrain + biome each rematch for variety.
+    this.state.currentTurnId = "";
+    this.state.turnEndsAt = 0;
+    // New terrain + biome each round for variety.
     const newBiome = randomBiome();
     this.state.biome = newBiome;
     const newSeed = Math.floor(Math.random() * 2 ** 31);
@@ -1071,7 +1337,7 @@ export class BattleRoom extends Room<BattleState> {
       p.damageDealt = 0;
       p.shotsFired = 0;
       this.initAmmo(p);
-      const spawnX = this.pickSpawnX();
+      const spawnX = this.pickSpawnX(p);
       p.facing = spawnX < WORLD.WIDTH / 2 ? 1 : -1;
       this.world.spawnTankAt(p, spawnX);
     });
@@ -1079,7 +1345,7 @@ export class BattleRoom extends Room<BattleState> {
     this.broadcastEvent({
       type: "chat",
       name: "server",
-      text: "Rematch: new map ready.",
+      text: "New round: ready up to start.",
       at: Date.now(),
     });
   }
