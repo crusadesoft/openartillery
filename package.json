@@ -23,7 +23,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "db:generate": "drizzle-kit generate --config packages/server/drizzle.config.ts",
-    "db:migrate": "npm run build:shared && node --loader tsx packages/server/src/db/migrate.ts",
+    "db:migrate": "npm run build:shared && node --import tsx packages/server/src/db/migrate.ts",
     "db:studio": "drizzle-kit studio --config packages/server/drizzle.config.ts",
     "docker:up": "docker compose up -d postgres redis",
     "docker:down": "docker compose down",
