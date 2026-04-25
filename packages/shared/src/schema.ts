@@ -24,6 +24,9 @@ export class Player extends Schema {
   @type("boolean") ready = false;
   @type("boolean") dead = false;
   @type("boolean") connected = true;
+  /** True when a human dropped mid-match and a bot brain is steering
+   *  their tank until they (or anyone with their userId) rejoin. */
+  @type("boolean") afk = false;
   @type("number") color = 0xffffff;
   @type("number") accentColor = 0xffd25e;
   @type("string") bodyStyle = "heavy";

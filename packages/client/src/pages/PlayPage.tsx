@@ -222,14 +222,31 @@ export function PlayPage({ navigate }: Props): JSX.Element {
               const biome = BIOMES[r.biome as BiomeId];
               const full = r.currentPlayers >= r.maxPlayers;
               const isPrivate = r.visibility === "private";
+              const inProgress = r.inProgress;
+              const canRejoin =
+                inProgress &&
+                !!session?.user.id &&
+                r.participantUserIds.includes(session.user.id);
               const stripeColor = biome
                 ? `#${biome.grass.toString(16).padStart(6, "0")}`
                 : "var(--ink-faint)";
               const age = relativeTime(r.createdAt, nowTick);
+              const buttonLabel = canRejoin
+                ? "Rejoin"
+                : inProgress
+                ? "In Progress"
+                : isPrivate
+                ? "Locked"
+                : full
+                ? "Full"
+                : "Join";
+              const buttonDisabled =
+                (inProgress && !canRejoin) ||
+                (!inProgress && (full || isPrivate));
               return (
                 <li
                   key={r.roomId}
-                  className={`lobby-row ${isPrivate ? "private" : ""}`}
+                  className={`lobby-row ${isPrivate ? "private" : ""} ${inProgress ? "in-progress" : ""}`}
                   style={{ borderLeftColor: isPrivate ? undefined : stripeColor }}
                 >
                   <div className="lobby-row-count">
@@ -242,7 +259,8 @@ export function PlayPage({ navigate }: Props): JSX.Element {
                       {r.lobbyName || "Lobby"}
                       {isPrivate && <span className="lobby-chip private">PRIVATE</span>}
                       {r.ranked && <span className="lobby-chip ranked">RANKED</span>}
-                      {!isPrivate && full && <span className="lobby-chip muted">FULL</span>}
+                      {inProgress && <span className="lobby-chip muted">IN PROGRESS</span>}
+                      {!isPrivate && !inProgress && full && <span className="lobby-chip muted">FULL</span>}
                     </div>
                     <div className="lobby-row-meta">
                       {r.hostName ? <>Host <strong>{r.hostName}</strong></> : "—"}
@@ -250,15 +268,30 @@ export function PlayPage({ navigate }: Props): JSX.Element {
                       {biome?.label ?? (r.biome || "Mystery")}
                       {" · "}
                       <span className="lobby-row-age">{age}</span>
+                      {r.participantNames.length > 0 && (
+                        <>
+                          {" · "}
+                          <span className="lobby-row-roster" title={r.participantNames.join(", ")}>
+                            {r.participantNames.slice(0, 3).join(", ")}
+                            {r.participantNames.length > 3 && ` +${r.participantNames.length - 3}`}
+                          </span>
+                        </>
+                      )}
                     </div>
                   </div>
                   <SfxButton
-                    className={isPrivate ? "ghost-btn" : "secondary-btn"}
-                    disabled={full || isPrivate}
+                    className={canRejoin ? "primary-btn" : isPrivate ? "ghost-btn" : "secondary-btn"}
+                    disabled={buttonDisabled}
                     onClick={() => joinLobby(r.roomId)}
-                    title={isPrivate ? "Private lobby — needs an invite code" : undefined}
+                    title={
+                      isPrivate
+                        ? "Private lobby — needs an invite code"
+                        : inProgress && !canRejoin
+                        ? "This match is in progress and you weren't part of it"
+                        : undefined
+                    }
                   >
-                    {isPrivate ? "Locked" : full ? "Full" : "Join"}
+                    {buttonLabel}
                   </SfxButton>
                 </li>
               );

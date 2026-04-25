@@ -69,6 +69,16 @@ export interface LobbySummary {
   ranked: boolean;
   hasBots: boolean;
   createdAt: number;
+  /** True once the match has left the waiting/countdown phase. */
+  inProgress: boolean;
+  /** userIds of every registered (non-guest) account that has held a
+   *  player slot in this match. Used by the lobby browser to decide
+   *  whether the viewer can rejoin a started match. Guests aren't
+   *  listed because they have no stable identifier. */
+  participantUserIds: string[];
+  /** Display names of all current player slots (humans + bots + afk).
+   *  Surfaces who's playing in the lobby browser. */
+  participantNames: string[];
 }
 
 export interface MatchSummary {

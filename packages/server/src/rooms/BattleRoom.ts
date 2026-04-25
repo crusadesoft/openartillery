@@ -218,6 +218,30 @@ export class BattleRoom extends Room<BattleState> {
       (options.username ?? "").trim().slice(0, 16) ||
       `Tank${this.state.players.size + 1}`;
 
+    // Rejoin: if a registered user comes back to a match where their
+    // userId already holds an afk slot, hand control back to them
+    // instead of seating a new tank. Re-keys the slot to the new
+    // sessionId so existing per-session checks (currentTurnId, host,
+    // turnOrder) keep working.
+    const incomingUserId = accountInfo?.userId ?? "";
+    if (incomingUserId) {
+      let afkSlot: Player | null = null;
+      this.state.players.forEach((q) => {
+        if (!afkSlot && q.afk && q.userId === incomingUserId) afkSlot = q;
+      });
+      if (afkSlot) {
+        this.adoptAfkSlot(afkSlot, client.sessionId);
+        return;
+      }
+    }
+
+    // Once the match is live, only former participants (handled above)
+    // may join. Casual + ranked lobbies in pre-match phases still
+    // accept fresh joiners.
+    if (this.state.phase === "playing" || this.state.phase === "countdown") {
+      throw new Error("match in progress");
+    }
+
     const p = new Player();
     p.id = client.sessionId;
     p.userId = accountInfo?.userId ?? "";
@@ -299,8 +323,102 @@ export class BattleRoom extends Room<BattleState> {
         at: Date.now(),
       });
     } catch {
-      this.finalizeLeave(client.sessionId);
+      // Live match — keep the slot alive under bot control instead of
+      // deleting. Either the original user (if registered) rejoins via
+      // adoptAfkSlot, or a bot finishes the match for them.
+      if (this.state.phase === "playing") {
+        this.installBotTakeover(client.sessionId);
+      } else {
+        this.finalizeLeave(client.sessionId);
+      }
     }
+  }
+
+  /** Hand a disconnected player's tank to a fresh BotBrain. The slot
+   *  stays in `state.players` (so turnOrder/currentTurnId still resolve)
+   *  with `afk=true`; the per-tick bot path picks them up. */
+  private installBotTakeover(sessionId: string): void {
+    const p = this.state.players.get(sessionId);
+    if (!p) return;
+    p.afk = true;
+    p.connected = false;
+    // Drop any pending charge state so the bot's startTurn reset isn't
+    // racing with leftover human inputs.
+    p.charging = false;
+    const meta = this.sessions.get(sessionId) ?? {
+      input: { left: false, right: false, up: false, down: false },
+      messages: [],
+      chats: [],
+    };
+    meta.input = { left: false, right: false, up: false, down: false };
+    meta.bot = new BotBrain(sessionId, this.world, "normal");
+    this.sessions.set(sessionId, meta);
+    if (this.state.currentTurnId === sessionId) {
+      // Their turn was already running when they dropped — reseed bot
+      // brain with the active player so it picks up where the input
+      // pipeline left off.
+      meta.bot.startTurn(p, this.state.startingHp);
+    }
+    if (this.state.hostSessionId === sessionId) {
+      const next =
+        Array.from(this.state.players.values()).find((q) => !q.bot && !q.afk && q.id !== sessionId) ??
+        null;
+      if (next) this.state.hostSessionId = next.id;
+    }
+    this.refreshMetadata();
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${p.name} disconnected — bot taking over`,
+      at: Date.now(),
+    });
+    this.logEvent({ kind: "leave", id: sessionId, name: p.name, afk: true });
+  }
+
+  /** Re-bind an afk slot to the rejoining player's new sessionId. The
+   *  schema map is keyed by sessionId, so we delete the old key and
+   *  insert under the new one; per-room state that referenced the old
+   *  id (turn order, host, current turn) follows along. */
+  private adoptAfkSlot(p: Player, newSessionId: string): void {
+    const oldSessionId = p.id;
+    if (oldSessionId === newSessionId) {
+      p.afk = false;
+      p.connected = true;
+      return;
+    }
+    this.state.players.delete(oldSessionId);
+    p.id = newSessionId;
+    p.afk = false;
+    p.connected = true;
+    this.state.players.set(newSessionId, p);
+
+    const oldMeta = this.sessions.get(oldSessionId);
+    this.sessions.delete(oldSessionId);
+    this.sessions.set(newSessionId, {
+      input: { left: false, right: false, up: false, down: false },
+      messages: oldMeta?.messages ?? [],
+      chats: oldMeta?.chats ?? [],
+      // No `bot` — the human is back in the seat.
+    });
+
+    if (this.state.currentTurnId === oldSessionId) {
+      this.state.currentTurnId = newSessionId;
+    }
+    if (this.state.hostSessionId === oldSessionId) {
+      this.state.hostSessionId = newSessionId;
+    }
+    this.turnOrder = this.turnOrder.map((id) =>
+      id === oldSessionId ? newSessionId : id,
+    );
+
+    this.refreshMetadata();
+    this.broadcastEvent({
+      type: "chat",
+      name: "server",
+      text: `${p.name} reconnected`,
+      at: Date.now(),
+    });
+    this.logEvent({ kind: "join", id: newSessionId, name: p.name, userId: p.userId, rejoin: true });
   }
 
   private finalizeLeave(sessionId: string): void {
@@ -394,6 +512,12 @@ export class BattleRoom extends Room<BattleState> {
         : "";
     const started =
       this.state.phase !== "waiting" && this.state.phase !== "ended";
+    const participantUserIds: string[] = [];
+    const participantNames: string[] = [];
+    this.state.players.forEach((p) => {
+      if (p.userId) participantUserIds.push(p.userId);
+      participantNames.push(p.name);
+    });
     this.setMetadata({
       mode: this.mode,
       ranked: this.state.ranked,
@@ -403,6 +527,8 @@ export class BattleRoom extends Room<BattleState> {
       hostName: hostName || undefined,
       started,
       inviteCode: this.state.inviteCode || undefined,
+      participantUserIds,
+      participantNames,
     });
   }
 

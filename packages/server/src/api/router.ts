@@ -22,13 +22,13 @@ apiRouter.get(
     const lobbies: LobbySummary[] = rooms
       .filter((r) => {
         const m = r.metadata ?? {};
-        // Any casual lobby (public or private) while still in the pre-match
-        // phase. Private ones surface so players can see activity; they just
-        // aren't joinable without the code. Started/in-progress matches are
-        // hidden — they don't accept new joiners anyway.
+        // Casual lobbies surface in the browser regardless of phase.
+        // Started matches show up so players can see activity (and former
+        // participants can rejoin); the client gates joining on phase +
+        // userId membership.
+        if (m.ranked) return false;
         const visibility = m.visibility === "private" ? "private" : "public";
-        const isCasual = !m.ranked && m.started !== true;
-        return isCasual && (visibility === "public" || visibility === "private");
+        return visibility === "public" || visibility === "private";
       })
       .map((r) => {
         const m = r.metadata ?? {};
@@ -46,6 +46,13 @@ apiRouter.get(
           ranked: Boolean(m.ranked),
           hasBots: false,
           createdAt: new Date(r.createdAt).getTime(),
+          inProgress: Boolean(m.started),
+          participantUserIds: Array.isArray(m.participantUserIds)
+            ? (m.participantUserIds as string[])
+            : [],
+          participantNames: Array.isArray(m.participantNames)
+            ? (m.participantNames as string[])
+            : [],
         } satisfies LobbySummary;
       });
     res.json({ lobbies });

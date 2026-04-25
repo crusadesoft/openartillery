@@ -1443,7 +1443,7 @@ export class BattleScene extends Phaser.Scene {
 
     // Lingering display time scales with length so short barks fade
     // fast and longer messages stick around.
-    const displayMs = Math.max(1800, Math.min(4500, 1400 + display.length * 55));
+    const displayMs = Math.max(3800, Math.min(6500, 3400 + display.length * 55));
     this.speechBubbles.set(ownerId, {
       container,
       ownerId,
