@@ -120,6 +120,14 @@ export const FireMessage = z.object({
   type: z.literal("fire"),
 });
 
+export const UseItemMessage = z.object({
+  type: z.literal("useItem"),
+  item: z.string().min(1).max(24),
+  /** target world coords (used by items like jetpack that need a landing spot) */
+  targetX: z.number().min(0).max(20000).optional(),
+  targetY: z.number().min(-2000).max(20000).optional(),
+});
+
 export const ReadyMessage = z.object({
   type: z.literal("ready"),
   ready: z.boolean(),
@@ -182,6 +190,7 @@ export const ClientMessageSchema = z.discriminatedUnion("type", [
   SelectWeaponMessage,
   AimMessage,
   FireMessage,
+  UseItemMessage,
   ChargeMessage,
   ReadyMessage,
   ChatMessage,

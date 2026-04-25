@@ -137,10 +137,10 @@ export function SettingsPage({ navigate }: Props): JSX.Element {
         <h2>Keybindings</h2>
         <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: 0 }}>
           Drag on the battlefield to aim. Drag distance = power. Release doesn't
-          fire — press <code>SPACE</code> or <code>ENTER</code> (or the red FIRE
-          button). Drive with <code>A/D</code> or arrow keys. <code>1–9</code>
-          selects weapons. <code>ESC</code> opens the pause menu with mid-match
-          settings.
+          fire — press <code>SPACE</code> (or the red FIRE button). Drive with{" "}
+          <code>A/D</code> or arrow keys. <code>1–9</code> selects weapons.{" "}
+          <code>Q/W/E/R</code> uses items. <code>Enter</code> opens chat (Enter
+          again sends, Esc cancels). <code>ESC</code> opens the pause menu.
         </p>
       </div>
 

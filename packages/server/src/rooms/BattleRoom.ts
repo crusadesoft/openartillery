@@ -21,6 +21,10 @@ import {
   WORLD,
   WEAPONS,
   type WeaponId,
+  ITEMS,
+  type ItemId,
+  ITEM_TUNING,
+  TARGETED_ITEMS,
   randomBiome,
   sanitizeLoadout,
 } from "@artillery/shared";
@@ -576,6 +580,72 @@ export class BattleRoom extends Room<BattleState> {
     this.fireCurrent(p);
   }
 
+  handleUseItem(
+    client: Client,
+    item: string,
+    target?: { x: number; y: number },
+  ): void {
+    if (this.state.currentTurnId !== client.sessionId) return;
+    if (this.turnFired) return;
+    if (this.world.hasLiveProjectiles()) return;
+    if (!(item in ITEMS)) return;
+    const p = this.state.players.get(client.sessionId);
+    if (!p || p.dead || p.charging) return;
+    const remaining = p.items.get(item) ?? 0;
+    if (remaining <= 0) return;
+    const id = item as ItemId;
+    if (TARGETED_ITEMS.has(id) && !target) return;
+    const ok = this.applyItemEffect(p, id, target);
+    if (!ok) return;
+    p.items.set(id, remaining - 1);
+    this.turnFired = true;
+    this.broadcastEvent({ type: "item", tankId: p.id, item: id, x: p.x, y: p.y });
+    this.logEvent({ kind: "item", id: p.id, item: id });
+    this.scheduleEndOfTurn();
+  }
+
+  private applyItemEffect(
+    p: Player,
+    id: ItemId,
+    target: { x: number; y: number } | undefined,
+  ): boolean {
+    switch (id) {
+      case "jetpack": {
+        if (!target) return false;
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const dist = Math.hypot(dx, dy);
+        if (dist > ITEM_TUNING.jetpack.maxRange) return false;
+        const margin = TANK.WIDTH / 2 + 4;
+        const nx = Math.max(margin, Math.min(WORLD.WIDTH - margin, target.x));
+        p.x = nx;
+        this.world.spawnTankAt(p, p.x);
+        return true;
+      }
+      case "teleport": {
+        const margin = TANK.WIDTH / 2 + 24;
+        const minDelta = ITEM_TUNING.teleport.minDelta;
+        let nx = p.x;
+        for (let i = 0; i < 20; i++) {
+          const candidate = margin + Math.random() * (WORLD.WIDTH - margin * 2);
+          if (Math.abs(candidate - p.x) >= minDelta) { nx = candidate; break; }
+        }
+        p.x = nx;
+        this.world.spawnTankAt(p, p.x);
+        return true;
+      }
+      case "shield": {
+        p.shieldExpiresAt = Date.now() + ITEM_TUNING.shield.durationMs;
+        return true;
+      }
+      case "repair": {
+        if (p.hp >= this.state.startingHp) return false;
+        p.hp = Math.min(this.state.startingHp, p.hp + ITEM_TUNING.repair.hpRestore);
+        return true;
+      }
+    }
+  }
+
   handleInput(
     client: Client,
     msg: { left: boolean; right: boolean; up: boolean; down: boolean },
@@ -859,6 +929,11 @@ export class BattleRoom extends Room<BattleState> {
         p.ammo.set(def.id, def.maxAmmo);
       }
     }
+    p.items.clear();
+    for (const def of Object.values(ITEMS)) {
+      p.items.set(def.id, def.maxCharges);
+    }
+    p.shieldExpiresAt = 0;
   }
 
   private nextTankColor(team: number = 0): number {
@@ -981,6 +1056,7 @@ export class BattleRoom extends Room<BattleState> {
       this.endMatch(null);
       return;
     }
+    const prevIndex = this.turnIndex;
     let tries = 0;
     do {
       this.turnIndex = (this.turnIndex + 1) % this.turnOrder.length;
@@ -997,7 +1073,14 @@ export class BattleRoom extends Room<BattleState> {
     this.turnFired = false;
     this.state.currentTurnId = id;
     this.state.turnEndsAt = Date.now() + (this.state.turnDurationSec > 0 ? this.state.turnDurationSec : 30) * 1000;
-    this.state.wind = rollWind(this.state.windMax);
+    // Wind rolls once per *round*, not per turn — fairness guarantee so
+    // every player in the cycle shoots in the same conditions until the
+    // rotation wraps back to the round-starter.
+    const isFirstTurn = prevIndex === -1;
+    const wrappedRound = !isFirstTurn && this.turnIndex <= prevIndex;
+    if (isFirstTurn || wrappedRound) {
+      this.state.wind = rollWind(this.state.windMax);
+    }
     this.state.turnNumber += 1;
     this.nextTurnAt = 0;
     const meta = this.sessions.get(id);

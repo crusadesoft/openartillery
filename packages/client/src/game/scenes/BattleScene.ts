@@ -4,6 +4,10 @@ import {
   BattleState,
   type BiomeId,
   DEFAULT_LOADOUT,
+  DEFAULT_ITEMS,
+  ITEM_TUNING,
+  type ItemId,
+  TARGETED_ITEMS,
   FireTile,
   Player,
   Projectile,
@@ -49,6 +53,9 @@ export class BattleScene extends Phaser.Scene {
 
   private stars!: Phaser.GameObjects.Group;
   private skyLayers: Phaser.GameObjects.GameObject[] = [];
+  /** Sprites that drift horizontally each frame and wrap around the
+   *  world. Populated by drawStars() per biome. Cleared with skyLayers. */
+  private driftClouds: { sprite: Phaser.GameObjects.Image; vx: number; w: number }[] = [];
   private aimLine!: Phaser.GameObjects.Graphics;
   private reticle!: Phaser.GameObjects.Graphics;
   private dragOverlay!: Phaser.GameObjects.Graphics;
@@ -117,6 +124,13 @@ export class BattleScene extends Phaser.Scene {
    *  "grab the handle where it is" feel instead of jumping to click. */
   private dragAnchorTip = { x: 0, y: 0 };
 
+  /** When set, the next click picks a target for this item instead of
+   *  aiming. UI dispatches `artillery:target-item` to enter this mode;
+   *  ESC or right-click cancels. */
+  private targetingItem: ItemId | null = null;
+  private targetGfx?: Phaser.GameObjects.Graphics;
+  private domTargetEvt!: (e: Event) => void;
+
   constructor() {
     super({ key: "battle" });
   }
@@ -125,7 +139,9 @@ export class BattleScene extends Phaser.Scene {
     this.room = this.game.registry.get("room") as Room<BattleState>;
     Sound.init();
 
-    this.cameras.main.setBounds(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
+    // Allow the camera to scroll above y=0 so airstrike shells (and any
+    // other top-of-world spawns) stay visible during their fall.
+    this.cameras.main.setBounds(0, -300, WORLD.WIDTH, WORLD.HEIGHT + 300);
     this.matter.world.setBounds(0, 0, WORLD.WIDTH, WORLD.HEIGHT);
 
     const biome = (this.room.state.biome as BiomeId) || "grasslands";
@@ -136,6 +152,7 @@ export class BattleScene extends Phaser.Scene {
     this.aimLine = this.add.graphics().setDepth(12);
     this.reticle = this.add.graphics().setDepth(13);
     this.dragOverlay = this.add.graphics().setDepth(14).setScrollFactor(0);
+    this.targetGfx = this.add.graphics().setDepth(15);
 
     this.windEmitter = this.add
       .particles(0, 0, "spark", {
@@ -195,6 +212,7 @@ export class BattleScene extends Phaser.Scene {
       view.step(dt, this.room.state.wind);
     });
     this.updateWindParticles();
+    this.updateDriftClouds(dt);
     this.checkLowTimeWarning();
     this.room.state.fires.forEach((f) => {
       const view = this.fires.get(f.id);
@@ -204,6 +222,7 @@ export class BattleScene extends Phaser.Scene {
 
     this.renderLastArc();
     this.renderAim();
+    this.renderTargeting();
     this.updateCamera(dt);
     this.updateSpeechBubbles(time);
   }
@@ -217,6 +236,24 @@ export class BattleScene extends Phaser.Scene {
     if (remaining > 0 && remaining <= 5000) {
       Sound.play("low_time");
       this.lowTimePlayedForTurn = true;
+    }
+  }
+
+  private updateDriftClouds(dt: number): void {
+    if (this.driftClouds.length === 0) return;
+    const wind = this.room.state.wind;
+    // Even at zero wind clouds keep a faint baseline drift, so the sky
+    // doesn't feel frozen on calm rounds. Wind shifts direction + speed.
+    const baseline = 6; // px/s rightward when wind is 0
+    const windFactor = 0.6; // wind units → px/s
+    for (const c of this.driftClouds) {
+      const speed = (baseline + wind * windFactor) * c.vx;
+      let nx = c.sprite.x + speed * dt;
+      const margin = c.w * 0.6 + 40;
+      // Wrap around the world horizontally so clouds drift forever.
+      if (nx > WORLD.WIDTH + margin) nx -= WORLD.WIDTH + margin * 2;
+      else if (nx < -margin) nx += WORLD.WIDTH + margin * 2;
+      c.sprite.x = nx;
     }
   }
 
@@ -343,6 +380,7 @@ export class BattleScene extends Phaser.Scene {
     this.stars?.clear(true, true);
     for (const obj of this.skyLayers) obj.destroy();
     this.skyLayers = [];
+    this.driftClouds = [];
     this.stars = this.add.group();
 
     // Sky gradient + mountains come from `TerrainView`. Here we layer
@@ -399,31 +437,133 @@ export class BattleScene extends Phaser.Scene {
       this.skyLayers.push(disc);
     }
 
-    // Drifting clouds — sit between the far and near mountain layers so
-    // they read as mid-distance and respect parallax. None on lava
-    // (replaced with falling embers via TerrainView).
+    // Distant pointy mountains on the horizon — broad parallax band
+    // tinted to the biome's haze so they recede into atmosphere.
     const rng = Phaser.Math.RND;
+    if (biome === "grasslands" || biome === "dusk" || biome === "arctic") {
+      const farMtn = this.add
+        .tileSprite(WORLD.WIDTH / 2, skyH * 0.86, WORLD.WIDTH, 168, "mountains_pointy")
+        .setOrigin(0.5, 1)
+        .setAlpha(0.55)
+        .setTint(pal.haze)
+        .setDepth(-2.6)
+        .setScrollFactor(0.22);
+      this.skyLayers.push(farMtn);
+    } else if (biome === "desert" || biome === "lava") {
+      const farMtn = this.add
+        .tileSprite(WORLD.WIDTH / 2, skyH * 0.86, WORLD.WIDTH, 168, "mountains_pointy")
+        .setOrigin(0.5, 1)
+        .setAlpha(0.5)
+        .setTint(biome === "lava" ? 0x4a1810 : 0xb88550)
+        .setDepth(-2.6)
+        .setScrollFactor(0.22);
+      this.skyLayers.push(farMtn);
+    }
+
+    // Discrete chunky mountains scattered between the pointy band and
+    // the procedural mountainNear layer. Skipped on lava so we don't
+    // crowd out the embers.
+    if (biome !== "lava") {
+      const mtnKeys = ["mountain_1", "mountain_2", "mountain_3"];
+      const mtnCount = biome === "arctic" || biome === "grasslands" ? 4 : 3;
+      const mtnTint =
+        biome === "arctic" ? 0xc9d8e8 :
+        biome === "desert" ? 0xc89360 :
+        biome === "dusk"   ? 0x6a4a6a :
+        0x6c7466;
+      for (let i = 0; i < mtnCount; i++) {
+        const key = mtnKeys[Math.floor(Math.random() * mtnKeys.length)]!;
+        const cx = (i + 0.5) * (WORLD.WIDTH / mtnCount) + rng.between(-160, 160);
+        const cy = skyH * 0.92;
+        const m = this.add
+          .image(cx, cy, key)
+          .setOrigin(0.5, 1)
+          .setAlpha(0.65)
+          .setTint(mtnTint)
+          .setScale(0.6 + Math.random() * 0.4)
+          .setDepth(-2.4)
+          .setScrollFactor(0.32);
+        this.skyLayers.push(m);
+      }
+    }
+
+    // Far drifting clouds (Kenney "Flat" variants) — smaller, more
+    // washed out, parallax further from the camera. Drift continuously
+    // (no yoyo) and pick up direction + speed from world wind.
+    if (biome !== "lava") {
+      const farKeys = ["cloud_far_1", "cloud_far_2", "cloud_far_3", "cloud_far_4", "cloud_far_5"];
+      const nFar = biome === "desert" ? 6 : 10;
+      for (let i = 0; i < nFar; i++) {
+        const key = farKeys[Math.floor(Math.random() * farKeys.length)]!;
+        const cx = rng.between(0, WORLD.WIDTH);
+        const cy = rng.between(skyH * 0.08, skyH * 0.35);
+        const scale = 0.45 + Math.random() * 0.35;
+        const c = this.add
+          .image(cx, cy, key)
+          .setAlpha(0.4 + Math.random() * 0.2)
+          .setTint(pal.cloud)
+          .setScale(scale)
+          .setDepth(-1.8)
+          .setScrollFactor(0.3);
+        this.skyLayers.push(c);
+        this.driftClouds.push({ sprite: c, vx: 0.25 + Math.random() * 0.2, w: c.displayWidth });
+      }
+    }
+
+    // Hills sprite-strip across the horizon — sits in front of the
+    // mid-distance mountains, behind the procedural ground silhouette.
+    if (biome === "grasslands" || biome === "dusk") {
+      const hillsKey = Math.random() < 0.5 ? "hills_1" : "hills_2";
+      const hills = this.add
+        .tileSprite(WORLD.WIDTH / 2, skyH * 0.96, WORLD.WIDTH, 128, hillsKey)
+        .setOrigin(0.5, 1)
+        .setAlpha(0.85)
+        .setTint(biome === "dusk" ? 0x5a3a52 : 0x7e9462)
+        .setDepth(-1.9)
+        .setScrollFactor(0.5);
+      this.skyLayers.push(hills);
+    }
+
+    // Distant trees scattered along the horizon for grasslands.
+    if (biome === "grasslands") {
+      const treeKeys = ["tree_1", "tree_2", "tree_3", "tree_4"];
+      const treeCount = 7;
+      for (let i = 0; i < treeCount; i++) {
+        const key = treeKeys[Math.floor(Math.random() * treeKeys.length)]!;
+        const cx = rng.between(0, WORLD.WIDTH);
+        const cy = skyH * 0.97;
+        const t = this.add
+          .image(cx, cy, key)
+          .setOrigin(0.5, 1)
+          .setAlpha(0.7)
+          .setTint(0x4a6a3c)
+          .setScale(0.35 + Math.random() * 0.25)
+          .setDepth(-1.7)
+          .setScrollFactor(0.45);
+        this.skyLayers.push(t);
+      }
+    }
+
+    // Near drifting clouds — painted Kenney variants. Sit between the
+    // far and near mountain layers so they read as mid-distance and
+    // respect parallax. Drift continuously and pick up wind direction
+    // from BattleScene.update().
     if (biome !== "lava") {
       const n = biome === "desert" ? 5 : 8;
+      const cloudKeys = ["cloud_1", "cloud_2", "cloud_3", "cloud_4", "cloud_5"];
       for (let i = 0; i < n; i++) {
-        const key = i % 2 === 0 ? "cloud_a" : "cloud_b";
+        const key = cloudKeys[Math.floor(Math.random() * cloudKeys.length)]!;
         const cx = rng.between(0, WORLD.WIDTH);
         const cy = rng.between(skyH * 0.2, skyH * 0.55);
         const c = this.add
           .image(cx, cy, key)
-          .setAlpha(0.45 + Math.random() * 0.35)
+          .setAlpha(0.65 + Math.random() * 0.25)
           .setTint(pal.cloud)
-          .setScale(0.8 + Math.random() * 0.7)
+          .setScale(0.7 + Math.random() * 0.6)
           .setDepth(-1.5)
           .setScrollFactor(0.45);
         this.skyLayers.push(c);
-        this.tweens.add({
-          targets: c,
-          x: cx + (Math.random() * 240 - 120),
-          duration: 30000 + Math.random() * 40000,
-          yoyo: true,
-          repeat: -1,
-        });
+        this.driftClouds.push({ sprite: c, vx: 1.1 + Math.random() * 0.6, w: c.displayWidth });
       }
     }
 
@@ -484,6 +624,15 @@ export class BattleScene extends Phaser.Scene {
       if (!this.canAct()) return;
       const isTouch =
         (pointer.event as PointerEvent | undefined)?.pointerType === "touch";
+      if (this.targetingItem) {
+        if (!isTouch && pointer.button === 2) {
+          this.cancelTargeting();
+          return;
+        }
+        if (!isTouch && pointer.button !== 0) return;
+        this.commitTargetClick(pointer);
+        return;
+      }
       if (!isTouch && pointer.button !== 0) return;
       this.dragging = true;
       this.beginDrag(pointer);
@@ -512,7 +661,11 @@ export class BattleScene extends Phaser.Scene {
       if (isTypingInForm()) return;
       const k = e.key.toLowerCase();
       this.pressed.add(k);
-      if (k === " " || e.key === "Enter") {
+      if (k === "escape" && this.targetingItem) {
+        this.cancelTargeting();
+        return;
+      }
+      if (k === " ") {
         this.tryFire();
       } else if (k >= "1" && k <= "9") {
         const idx = Number(k) - 1;
@@ -520,17 +673,128 @@ export class BattleScene extends Phaser.Scene {
           this.room.send("selectWeapon", { weapon: DEFAULT_LOADOUT[idx]! });
           Sound.play("ui_click");
         }
+      } else if (k === "q" || k === "w" || k === "e" || k === "r") {
+        const idx = ["q", "w", "e", "r"].indexOf(k);
+        if (idx < DEFAULT_ITEMS.length && this.canAct()) {
+          const id = DEFAULT_ITEMS[idx]!;
+          if (TARGETED_ITEMS.has(id)) {
+            this.beginTargeting(id);
+          } else {
+            this.room.send("useItem", { item: id });
+            Sound.play("ui_click");
+          }
+        }
       }
     };
     this.domKeyUp = (e: KeyboardEvent) => {
       this.pressed.delete(e.key.toLowerCase());
     };
+    this.domTargetEvt = (e: Event) => {
+      const detail = (e as CustomEvent<{ item: ItemId }>).detail;
+      if (!detail) return;
+      if (!this.canAct()) return;
+      this.beginTargeting(detail.item);
+    };
     window.addEventListener("keydown", this.domKeyDown);
     window.addEventListener("keyup", this.domKeyUp);
+    window.addEventListener("artillery:target-item", this.domTargetEvt);
+    // Right-click context menu would dismiss the targeting UX awkwardly.
+    const onContextMenu = (e: MouseEvent) => {
+      if (this.targetingItem) e.preventDefault();
+    };
+    window.addEventListener("contextmenu", onContextMenu);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       window.removeEventListener("keydown", this.domKeyDown);
       window.removeEventListener("keyup", this.domKeyUp);
+      window.removeEventListener("artillery:target-item", this.domTargetEvt);
+      window.removeEventListener("contextmenu", onContextMenu);
     });
+  }
+
+  private beginTargeting(id: ItemId): void {
+    if (!this.canAct()) return;
+    const self = this.room.state.players.get(this.room.sessionId);
+    if (!self) return;
+    const remaining = self.items.get(id) ?? 0;
+    if (remaining <= 0) return;
+    this.targetingItem = id;
+    Sound.play("ui_click");
+  }
+
+  private cancelTargeting(): void {
+    this.targetingItem = null;
+    this.targetGfx?.clear();
+  }
+
+  private commitTargetClick(pointer: Phaser.Input.Pointer): void {
+    const id = this.targetingItem;
+    if (!id) return;
+    const self = this.room.state.players.get(this.room.sessionId);
+    if (!self) {
+      this.cancelTargeting();
+      return;
+    }
+    const range = id === "jetpack" ? ITEM_TUNING.jetpack.maxRange : 0;
+    const dx = pointer.worldX - self.x;
+    const dy = pointer.worldY - self.y;
+    const dist = Math.hypot(dx, dy);
+    let tx = pointer.worldX;
+    let ty = pointer.worldY;
+    if (range > 0 && dist > range) {
+      const k = range / dist;
+      tx = self.x + dx * k;
+      ty = self.y + dy * k;
+    }
+    this.room.send("useItem", { item: id, targetX: tx, targetY: ty });
+    Sound.play("ui_click");
+    this.cancelTargeting();
+  }
+
+  private renderTargeting(): void {
+    const g = this.targetGfx;
+    if (!g) return;
+    g.clear();
+    const id = this.targetingItem;
+    if (!id) return;
+    if (!this.canAct()) {
+      this.cancelTargeting();
+      return;
+    }
+    const self = this.room.state.players.get(this.room.sessionId);
+    if (!self) return;
+    const range = id === "jetpack" ? ITEM_TUNING.jetpack.maxRange : 0;
+    if (range > 0) {
+      g.lineStyle(2, 0x7ed8ff, 0.7);
+      g.strokeCircle(self.x, self.y, range);
+      g.lineStyle(1, 0x7ed8ff, 0.25);
+      g.strokeCircle(self.x, self.y, range * 0.66);
+      g.strokeCircle(self.x, self.y, range * 0.33);
+    }
+    const ptr = this.input.activePointer;
+    const dx = ptr.worldX - self.x;
+    const dy = ptr.worldY - self.y;
+    const dist = Math.hypot(dx, dy);
+    let tx = ptr.worldX;
+    let ty = ptr.worldY;
+    if (range > 0 && dist > range) {
+      const k = range / dist;
+      tx = self.x + dx * k;
+      ty = self.y + dy * k;
+    }
+    const inRange = range === 0 || dist <= range;
+    const reticleColor = inRange ? 0x7ed8ff : 0xff5e5e;
+    g.lineStyle(2, reticleColor, 0.95);
+    g.strokeCircle(tx, ty, 14);
+    g.beginPath();
+    g.moveTo(tx - 22, ty); g.lineTo(tx - 6, ty);
+    g.moveTo(tx + 6, ty); g.lineTo(tx + 22, ty);
+    g.moveTo(tx, ty - 22); g.lineTo(tx, ty - 6);
+    g.moveTo(tx, ty + 6); g.lineTo(tx, ty + 22);
+    g.strokePath();
+    g.lineStyle(1, reticleColor, 0.5);
+    g.beginPath();
+    g.moveTo(self.x, self.y); g.lineTo(tx, ty);
+    g.strokePath();
   }
 
   private tryFire(): void {
@@ -849,7 +1113,7 @@ export class BattleScene extends Phaser.Scene {
     const margin = 120;
     const ty = Phaser.Math.Clamp(
       target.y - 60,
-      cam.height / 2 - margin,
+      -300 + cam.height / 2,
       WORLD.HEIGHT - cam.height / 2 + margin,
     );
     const lerp = 1 - Math.pow(0.001, dt);
@@ -895,10 +1159,24 @@ export class BattleScene extends Phaser.Scene {
   }
 
   private pickCameraTarget(): { x: number; y: number } | null {
-    const proj = this.room.state.projectiles.values().next().value as
-      | Projectile
-      | undefined;
-    if (proj) return { x: proj.x, y: proj.y };
+    if (this.room.state.projectiles.size > 0) {
+      // Frame the *bounding box* of all live projectiles. For airstrike
+      // (4 shells at the world ceiling falling toward impact) the box
+      // spans ~700px vertically, and centering on its midpoint keeps
+      // every shell in view. Single-projectile shots collapse to that
+      // projectile's position.
+      let minX = Infinity;
+      let maxX = -Infinity;
+      let minY = Infinity;
+      let maxY = -Infinity;
+      this.room.state.projectiles.forEach((p) => {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+      });
+      return { x: (minX + maxX) / 2, y: (minY + maxY) / 2 };
+    }
     const cur = this.room.state.players.get(this.room.state.currentTurnId);
     if (cur) return { x: cur.x, y: cur.y };
     const self = this.room.state.players.get(this.room.sessionId);

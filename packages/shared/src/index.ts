@@ -1,6 +1,7 @@
 export * from "./constants.js";
 export * from "./weapon-types.js";
 export * from "./weapons.js";
+export * from "./items.js";
 export * from "./messages.js";
 export * from "./schema.js";
 export * from "./modes.js";

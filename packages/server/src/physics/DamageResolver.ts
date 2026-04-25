@@ -1,4 +1,11 @@
-import { type BattleState, TANK, WEAPONS, WORLD, type WeaponId } from "@artillery/shared";
+import {
+  type BattleState,
+  ITEM_TUNING,
+  TANK,
+  WEAPONS,
+  WORLD,
+  type WeaponId,
+} from "@artillery/shared";
 import type { ProjectileBody } from "./Projectile.js";
 import type { DamageRecord, StepTelemetry } from "./World.js";
 
@@ -36,7 +43,10 @@ export function applyBlastDamage(
     const effective = radius + TANK.WIDTH / 2;
     if (dist >= effective) return;
     const falloff = Math.max(0, 1 - dist / effective);
-    const dmg = Math.round(baseDmg * falloff);
+    let dmg = Math.round(baseDmg * falloff);
+    if (p.shieldExpiresAt > Date.now()) {
+      dmg = Math.round(dmg * ITEM_TUNING.shield.multiplier);
+    }
     if (dmg <= 0) return;
     const applied = Math.min(p.hp, dmg);
     p.hp = Math.max(0, p.hp - dmg);
@@ -102,7 +112,10 @@ export function tickFires(
       const dy = p.y - tile.y;
       if (Math.hypot(dx, dy) >= tile.radius + TANK.WIDTH / 2) return;
       const def = WEAPONS.napalm;
-      const dmg = Math.max(1, Math.round(def.napalm?.damagePerSec ?? 10));
+      let dmg = Math.max(1, Math.round(def.napalm?.damagePerSec ?? 10));
+      if (p.shieldExpiresAt > Date.now()) {
+        dmg = Math.max(1, Math.round(dmg * ITEM_TUNING.shield.multiplier));
+      }
       const applied = Math.min(p.hp, dmg);
       p.hp = Math.max(0, p.hp - dmg);
       if (owner && owner.id !== p.id) owner.damageDealt += applied;

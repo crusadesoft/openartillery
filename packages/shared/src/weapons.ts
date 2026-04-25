@@ -80,10 +80,11 @@ export const WEAPONS: Record<WeaponId, WeaponDef> = {
     tint: 0x8aff5e,
     projectileRadius: 5,
     digFactor: 1.0,
-    bounces: 3,
+    bounces: 1,
+    restDetonate: { afterSec: 1.5, speedThreshold: 50 },
     fireSfx: "fire_small",
     explodeSfx: "boom_small",
-    blurb: "Rolls and bounces three times before popping.",
+    blurb: "Bounces, rolls, then pops once it settles.",
     maxAmmo: 5,
   },
   napalm: {

@@ -15,7 +15,7 @@ import {
   makeProjShell,
   makeProjSkipper,
 } from "../textures/projectileTextures";
-import { makeCloud, makeMoon, makeSunHalo } from "../textures/skyTextures";
+import { makeMoon, makeSunHalo } from "../textures/skyTextures";
 import {
   makeCactus,
   makeCrystal,
@@ -39,6 +39,30 @@ export class BootScene extends Phaser.Scene {
     this.load.image("terrain_rock", "/textures/terrain/rock.jpg");
     this.load.image("tank_plates", "/textures/tank/plates.jpg");
 
+    // Painted background elements — Kenney "Background Elements" pack
+    // (CC0). Near-detail clouds, flat far clouds for distant parallax,
+    // hills/mountains/trees for biome-specific horizon detail.
+    this.load.image("cloud_1", "/textures/sky/cloud1.png");
+    this.load.image("cloud_2", "/textures/sky/cloud2.png");
+    this.load.image("cloud_3", "/textures/sky/cloud3.png");
+    this.load.image("cloud_4", "/textures/sky/cloud4.png");
+    this.load.image("cloud_5", "/textures/sky/cloud5.png");
+    this.load.image("cloud_far_1", "/textures/sky/cloud_far1.png");
+    this.load.image("cloud_far_2", "/textures/sky/cloud_far2.png");
+    this.load.image("cloud_far_3", "/textures/sky/cloud_far3.png");
+    this.load.image("cloud_far_4", "/textures/sky/cloud_far4.png");
+    this.load.image("cloud_far_5", "/textures/sky/cloud_far5.png");
+    this.load.image("hills_1", "/textures/sky/hills1.png");
+    this.load.image("hills_2", "/textures/sky/hills2.png");
+    this.load.image("mountain_1", "/textures/sky/mountain1.png");
+    this.load.image("mountain_2", "/textures/sky/mountain2.png");
+    this.load.image("mountain_3", "/textures/sky/mountain3.png");
+    this.load.image("mountains_pointy", "/textures/sky/mountains_pointy.png");
+    this.load.image("tree_1", "/textures/sky/tree1.png");
+    this.load.image("tree_2", "/textures/sky/tree2.png");
+    this.load.image("tree_3", "/textures/sky/tree3.png");
+    this.load.image("tree_4", "/textures/sky/tree4.png");
+
     makePixelTex(this, "pixel");
     makeCircleTex(this, "proj", 10, 0xffffff);
     makeCircleTex(this, "spark", 6, 0xffffff);
@@ -60,8 +84,6 @@ export class BootScene extends Phaser.Scene {
     // bake tank parts here — single source of truth.
 
     makeDebris(this, "debris_chunk", 7, 7);
-    makeCloud(this, "cloud_a", 180, 46);
-    makeCloud(this, "cloud_b", 120, 36);
     makeMoon(this, "moon", 64);
     makeSunHalo(this, "sun_halo", 120);
     makeGrassTuft(this, "grass_tuft");

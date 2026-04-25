@@ -18,7 +18,7 @@ export function ChatPanel({
   entries,
   onSend,
   variant = "floating",
-  placeholder = "Press T to chat · Enter sends · Esc cancels",
+  placeholder = "Press Enter to chat · Esc cancels",
 }: Props): JSX.Element {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
@@ -28,10 +28,12 @@ export function ChatPanel({
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [entries]);
 
-  // "T" globally focuses the chat input (Quake / most multiplayer games).
+  // Enter globally focuses the chat input. Space remains the fire key, so
+  // Enter is freed up for chat — press once to open the input, type, press
+  // Enter again to send.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== "t") return;
+      if (e.key !== "Enter") return;
       const target = e.target as HTMLElement | null;
       if (
         target &&

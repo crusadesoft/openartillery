@@ -10,6 +10,8 @@ export interface ProjectileBody {
   age: number;
   /** true = already split; do not split again */
   split: boolean;
+  /** seconds spent below restDetonate.speedThreshold (grenade fuse) */
+  restTime: number;
 }
 
 export function createProjectile(
@@ -39,6 +41,7 @@ export function createProjectile(
     ttl: 14,
     age: 0,
     split: false,
+    restTime: 0,
   };
 }
 
@@ -79,6 +82,21 @@ export function stepProjectiles(
     const substeps = Math.max(1, Math.ceil((speed * dt) / 8));
     const sdt = dt / substeps;
 
+    if (def.restDetonate && b.bouncesLeft <= 0) {
+      const threshold = def.restDetonate.speedThreshold ?? 40;
+      const surface = terrain.heightAt(b.state.x);
+      const onGround = b.state.y >= surface - 8;
+      if (speed < threshold && onGround) {
+        b.restTime += dt;
+        if (b.restTime >= def.restDetonate.afterSec) {
+          impacts.push({ body: b, x: b.state.x, y: b.state.y });
+          continue;
+        }
+      } else {
+        b.restTime = 0;
+      }
+    }
+
     let exploded = false;
     for (let i = 0; i < substeps && !exploded; i++) {
       b.state.vx += wind * sdt;
@@ -104,6 +122,18 @@ export function stepProjectiles(
           const dot = b.state.vx * nxn + b.state.vy * nyn;
           b.state.vx = (b.state.vx - 2 * dot * nxn) * 0.55;
           b.state.vy = (b.state.vy - 2 * dot * nyn) * 0.55;
+          b.state.x = nx + nxn * 3;
+          b.state.y = ny + nyn * 3;
+        } else if (def.restDetonate) {
+          // Out of bounces but rest-fused: keep rolling with heavy damping
+          // so the rest-timer (above) eventually triggers detonation.
+          const slope = terrain.heightAt(nx + 4) - terrain.heightAt(nx - 4);
+          const nlen = Math.hypot(slope, 8);
+          const nxn = -slope / nlen;
+          const nyn = -8 / nlen;
+          const dot = b.state.vx * nxn + b.state.vy * nyn;
+          b.state.vx = (b.state.vx - 2 * dot * nxn) * 0.25;
+          b.state.vy = (b.state.vy - 2 * dot * nyn) * 0.25;
           b.state.x = nx + nxn * 3;
           b.state.y = ny + nyn * 3;
         } else {

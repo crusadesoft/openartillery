@@ -329,7 +329,10 @@ export class World {
       }
     }
 
-    // Airstrike: spawn `count` vertical shells near impact.
+    // Airstrike: spawn `count` vertical shells at the top of the world
+    // and let them fall all the way down. The visual interest is the
+    // whole arc — camera should pan up to frame them (see BattleScene
+    // camera follow).
     if (def.airstrike) {
       const { count, spacing } = def.airstrike;
       const altitude = -Math.max(80, def.airstrike.altitude);

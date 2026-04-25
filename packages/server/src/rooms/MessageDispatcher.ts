@@ -17,6 +17,11 @@ export interface MessageHandlers {
   handleSelectWeapon: (client: Client, weapon: string) => void;
   handleAim: (client: Client, angle: number, power: number, facing?: -1 | 1) => void;
   handleFireNow: (client: Client) => void;
+  handleUseItem: (
+    client: Client,
+    item: string,
+    target?: { x: number; y: number },
+  ) => void;
   handleCharge: (client: Client, charging: boolean) => void;
   handleReady: (client: Client, ready: boolean) => void;
   handleChat: (
@@ -99,6 +104,14 @@ export function dispatchClientMessage(
     case "fire":
       handlers.handleFireNow(client);
       break;
+    case "useItem": {
+      const target =
+        msg.targetX !== undefined && msg.targetY !== undefined
+          ? { x: msg.targetX, y: msg.targetY }
+          : undefined;
+      handlers.handleUseItem(client, msg.item, target);
+      break;
+    }
     case "charge":
       handlers.handleCharge(client, msg.charging);
       break;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import {
+  ALL_BIOMES,
   BIOMES,
   type BiomeId,
   type GameMode,
@@ -10,8 +11,9 @@ import { ChatPanel } from "./ChatPanel";
 import { SfxButton } from "./SfxButton";
 import { Sound } from "../game/audio/Sound";
 import { PlayerRoster } from "./lobby/PlayerRoster";
-import { MatchSettingsPanel } from "./lobby/MatchSettingsPanel";
-import { LobbyVisibilityForm } from "./lobby/LobbyVisibilityForm";
+import { ChipMenu } from "./lobby/ChipMenu";
+import { Slider } from "./lobby/Slider";
+import { click } from "./sfx";
 import type { MatchSettings, LobbyConfig } from "./lobby/types";
 
 export type { MatchSettings, LobbyConfig };
@@ -42,7 +44,6 @@ interface Props {
   teamCount: number;
   friendlyFire: boolean;
   ranked: boolean;
-  /** True if any current player is a bot — disables ranked toggle. */
   hasBots: boolean;
   chatEntries: ChatEntry[];
   onReadyToggle: () => void;
@@ -56,7 +57,6 @@ interface Props {
   onChat: (text: string) => void;
   onLeave: () => void;
 }
-
 
 export function Lobby({
   players,
@@ -112,14 +112,13 @@ export function Lobby({
     else setNameDraft(lobbyName);
   };
 
+  const [pwDraft, setPwDraft] = useState("");
+  useEffect(() => { if (!hasPassword) setPwDraft(""); }, [hasPassword]);
+
   useEffect(() => {
-    try {
-      Sound.init();
-      Sound.play("turn");
-    } catch { /* ignore */ }
+    try { Sound.init(); Sound.play("turn"); } catch { /* ignore */ }
   }, []);
 
-  // Beep once per second during the pre-match countdown.
   const lastBeepRef = useRef<number | null>(null);
   useEffect(() => {
     if (phase !== "countdown") { lastBeepRef.current = null; return; }
@@ -143,10 +142,7 @@ export function Lobby({
 
   const isCasual =
     rawMode === "bots" || rawMode === "private" || rawMode === "custom";
-  // Host-only controls: bot roster + lobby/match settings. Guests see the
-  // roster but not the editing affordances. The server double-checks.
   const canTweakLobby = isCasual && phase === "waiting" && isHost;
-  // Ranked rooms can't add bots — gate the button before the server bounces it.
   const canAddBot = canTweakLobby && players.length < maxPlayers && !ranked;
   const canTweakSettings = canTweakLobby;
 
@@ -175,15 +171,204 @@ export function Lobby({
               </span>
             ) : (
               <>
-                <span className="lobby-stage-chip">{mode}</span>
-                <span className="lobby-stage-chip">
-                  {biomeRandom ? "??? Random biome" : biomePalette.label}
-                </span>
+                <ChipMenu label={mode} readOnly title="Game mode">
+                  {null}
+                </ChipMenu>
+
+                <ChipMenu
+                  label={`${players.length}/${maxPlayers} crew`}
+                  readOnly={!canTweakLobby}
+                  title="Crew size"
+                >
+                  <div className="chip-menu-title">Max players</div>
+                  <Slider
+                    label="Max"
+                    min={Math.max(2, players.length)}
+                    max={8}
+                    step={1}
+                    value={maxPlayers}
+                    onChange={(v) => v !== maxPlayers && onLobbyConfig({ maxPlayers: v })}
+                  />
+                </ChipMenu>
+
+                <ChipMenu
+                  label={biomeRandom ? "??? Biome" : biomePalette.label}
+                  readOnly={!canTweakLobby}
+                  title="Biome"
+                >
+                  <div className="chip-menu-title">Biome</div>
+                  <div className="pill-row">
+                    <div
+                      className={`pill ${biomeRandom ? "active" : ""}`}
+                      onClick={() => { click(); onLobbyConfig({ biome: "random" }); }}
+                      title="Stay a mystery — biome re-rolls when the match starts"
+                    >
+                      Random · ???
+                    </div>
+                    {ALL_BIOMES.map((b) => (
+                      <div
+                        key={b}
+                        className={`pill ${biome === b && !biomeRandom ? "active" : ""}`}
+                        onClick={() => { click(); if (b !== biome) onLobbyConfig({ biome: b }); }}
+                        title={BIOMES[b].blurb}
+                      >
+                        {BIOMES[b].label}
+                      </div>
+                    ))}
+                  </div>
+                </ChipMenu>
+
                 {isCasual && (
-                  <span className={`lobby-stage-chip ${visibility === "private" ? "warn" : "ok"}`}>
-                    {visibility === "private" ? "Private" : "Public"}
-                  </span>
+                  <ChipMenu
+                    label={visibility === "private" ? (hasPassword ? "Private · 🔒" : "Private") : "Public"}
+                    tone={visibility === "private" ? "warn" : "ok"}
+                    readOnly={!canTweakLobby}
+                    title="Access"
+                  >
+                    <div className="chip-menu-title">Access</div>
+                    <div className="pill-row">
+                      <div
+                        className={`pill ${visibility === "public" ? "active" : ""}`}
+                        onClick={() => { click(); if (visibility !== "public") onLobbyConfig({ visibility: "public" }); }}
+                      >
+                        Public
+                      </div>
+                      <div
+                        className={`pill ${visibility === "private" ? "active" : ""}`}
+                        onClick={() => { click(); if (visibility !== "private") onLobbyConfig({ visibility: "private" }); }}
+                      >
+                        Private
+                      </div>
+                    </div>
+                    {visibility === "private" && (
+                      <div className="field" style={{ marginTop: 10 }}>
+                        <label>
+                          Password{" "}
+                          <span style={{ color: hasPassword ? "var(--ok)" : "var(--ink-faint)", fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", marginLeft: 6 }}>
+                            {hasPassword ? "· active" : "· none"}
+                          </span>
+                        </label>
+                        <div style={{ display: "flex", gap: 6 }}>
+                          <input
+                            type="text"
+                            value={pwDraft}
+                            placeholder={hasPassword ? "Set — type to replace" : "(optional) set a passcode"}
+                            maxLength={64}
+                            onChange={(e) => setPwDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                            }}
+                            onBlur={() => { if (pwDraft) { onLobbyConfig({ password: pwDraft }); setPwDraft(""); } }}
+                            name="room-passcode"
+                            autoComplete="off"
+                            autoCorrect="off"
+                            autoCapitalize="off"
+                            spellCheck={false}
+                            data-1p-ignore=""
+                            data-lpignore="true"
+                            data-bwignore=""
+                            data-form-type="other"
+                            style={{ flex: 1, WebkitTextSecurity: "disc" } as React.CSSProperties}
+                          />
+                          {hasPassword && (
+                            <SfxButton className="ghost-btn" title="Remove password" onClick={() => { setPwDraft(""); onLobbyConfig({ password: "" }); }}>
+                              Clear
+                            </SfxButton>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </ChipMenu>
                 )}
+
+                <ChipMenu
+                  label={`${turnDurationSec}s · ${startingHp} HP`}
+                  readOnly={!canTweakLobby}
+                  title="Match settings"
+                >
+                  <div className="chip-menu-title">Match</div>
+                  <Slider
+                    label="Turn Time" unit="s"
+                    min={10} max={90} step={5}
+                    value={turnDurationSec}
+                    onChange={(v) => onSettings({ turnDurationSec: v })}
+                  />
+                  <Slider
+                    label="Starting HP"
+                    min={100} max={600} step={25}
+                    value={startingHp}
+                    onChange={(v) => onSettings({ startingHp: v })}
+                  />
+                  <Slider
+                    label="Fuel"
+                    min={0} max={200} step={10}
+                    value={fuelPerTurn}
+                    onChange={(v) => onSettings({ fuelPerTurn: v })}
+                  />
+                  <Slider
+                    label="Max Wind"
+                    min={0} max={60} step={5}
+                    value={windMax}
+                    onChange={(v) => onSettings({ maxWind: v })}
+                  />
+                </ChipMenu>
+
+                {isCasual && (
+                  <ChipMenu
+                    label={
+                      ranked
+                        ? "Ranked"
+                        : teamMode
+                        ? `Teams · ${teamCount}`
+                        : "FFA"
+                    }
+                    readOnly={!canTweakLobby}
+                    title="Match type"
+                  >
+                    <div className="chip-menu-title">Match type</div>
+                    <label className="toggle-row" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <input
+                        type="checkbox"
+                        checked={ranked}
+                        disabled={hasBots && !ranked}
+                        onChange={(e) => onLobbyConfig({ ranked: e.target.checked })}
+                      />
+                      <span>Ranked (no bots, MMR applies)</span>
+                    </label>
+                    {hasBots && !ranked && (
+                      <div style={{ fontFamily: "var(--font-mono)", fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.08em", marginBottom: 8 }}>
+                        Remove bots to enable ranked.
+                      </div>
+                    )}
+                    <label className="toggle-row" style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <input
+                        type="checkbox"
+                        checked={teamMode}
+                        onChange={(e) => onLobbyConfig({ teamMode: e.target.checked })}
+                      />
+                      <span>Enable teams</span>
+                    </label>
+                    {teamMode && (
+                      <>
+                        <Slider
+                          label="Number of teams"
+                          min={2} max={4} step={1}
+                          value={teamCount}
+                          onChange={(v) => onLobbyConfig({ teamCount: v })}
+                        />
+                        <label className="toggle-row" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <input
+                            type="checkbox"
+                            checked={friendlyFire}
+                            onChange={(e) => onLobbyConfig({ friendlyFire: e.target.checked })}
+                          />
+                          <span>Friendly fire</span>
+                        </label>
+                      </>
+                    )}
+                  </ChipMenu>
+                )}
+
                 <span className="lobby-stage-chip muted">
                   {readyCount}/{humans.length} ready
                 </span>
@@ -228,53 +413,9 @@ export function Lobby({
             entries={chatEntries}
             onSend={onChat}
             variant="embedded"
-            placeholder="Say hi…  (Enter sends)"
+            placeholder="Say hi…"
           />
         </main>
-
-        <aside className="lobby-stage-right">
-          {canTweakLobby ? (
-            <>
-              <div className="lobby-stage-section-title">Lobby settings</div>
-              <LobbyVisibilityForm
-                players={players.length}
-                maxPlayers={maxPlayers}
-                biome={biome}
-                biomeRandom={biomeRandom}
-                visibility={visibility}
-                hasPassword={hasPassword}
-                onLobbyConfig={onLobbyConfig}
-              />
-              <MatchSettingsPanel
-                turnDurationSec={turnDurationSec}
-                fuelPerTurn={fuelPerTurn}
-                startingHp={startingHp}
-                windMax={windMax}
-                customTeams
-                teamMode={teamMode}
-                teamCount={teamCount}
-                friendlyFire={friendlyFire}
-                ranked={ranked}
-                rankedLocked={hasBots}
-                onSettings={onSettings}
-                onLobbyConfig={onLobbyConfig}
-              />
-            </>
-          ) : (
-            <div className="lobby-stage-host-notice">
-              <div className="lobby-stage-section-title">Match preview</div>
-              <p style={{ color: "var(--ink-dim)", fontSize: 13, lineHeight: 1.5 }}>
-                The host sets the rules. Get ready when you're in.
-              </p>
-              <dl className="lobby-stage-stats">
-                <dt>Turn time</dt><dd>{turnDurationSec}s</dd>
-                <dt>Starting HP</dt><dd>{startingHp}</dd>
-                <dt>Fuel / turn</dt><dd>{fuelPerTurn}</dd>
-                <dt>Max wind</dt><dd>{windMax}</dd>
-              </dl>
-            </div>
-          )}
-        </aside>
       </div>
 
       <footer className="lobby-stage-footer">

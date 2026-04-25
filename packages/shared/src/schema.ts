@@ -37,6 +37,10 @@ export class Player extends Schema {
   @type("uint8") team = 0;
   /** Remaining rounds per weapon. Unlimited weapons don't appear here. */
   @type({ map: "number" }) ammo = new MapSchema<number>();
+  /** Remaining charges per utility item. Items absent from the map are out. */
+  @type({ map: "number" }) items = new MapSchema<number>();
+  /** Unix ms; while > now, incoming damage is halved. 0 = no shield. */
+  @type("number") shieldExpiresAt = 0;
 }
 
 export class Projectile extends Schema {

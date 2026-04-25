@@ -149,6 +149,85 @@
 .weapon-tile.empty:hover { transform: none; background: inherit; cursor: not-allowed; }
 .weapon-tile:disabled { cursor: not-allowed; }
 
+.item-tray {
+  position: absolute;
+  left: 50%;
+  bottom: 92px;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 5px;
+  background: linear-gradient(180deg, rgba(14,16,20,0.92), rgba(8,10,14,0.96));
+  border: 1px solid var(--panel-edge);
+  border-top: 2px solid var(--khaki);
+  border-radius: 2px;
+  padding: 5px;
+  box-shadow: 0 8px 22px rgba(0,0,0,0.45);
+  transition: opacity 180ms var(--ease), filter 180ms var(--ease);
+}
+.item-tray.idle { opacity: 0.4; filter: grayscale(0.5); pointer-events: none; }
+.item-tile {
+  position: relative;
+  width: 56px;
+  min-height: 56px;
+  background: linear-gradient(180deg, rgba(30,34,44,0.7), rgba(15,17,22,0.9));
+  border: 1px solid var(--panel-edge);
+  border-radius: 2px;
+  padding: 4px 3px 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+  transition: transform 100ms var(--ease), border-color 160ms var(--ease), background 160ms var(--ease);
+  font-family: var(--font-display);
+}
+.item-tile:hover { transform: translateY(-1px); background: linear-gradient(180deg, rgba(40,55,75,0.7), rgba(20,28,38,0.9)); }
+.item-tile.active { background: linear-gradient(180deg, rgba(60,75,100,0.6), rgba(20,28,38,0.85)); }
+.item-tile .hotkey {
+  position: absolute;
+  top: 2px; left: 4px;
+  font-size: 9px;
+  color: var(--ink-faint);
+  font-family: var(--font-mono);
+}
+.item-tile .glyph {
+  width: 24px; height: 24px;
+  border-radius: 2px;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900;
+  font-size: 16px;
+  margin-top: 4px;
+  border: 1px solid rgba(0,0,0,0.3);
+}
+.item-tile .label {
+  font-size: 8px;
+  color: var(--ink-dim);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-weight: 700;
+  text-align: center;
+}
+.item-tile .ammo {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--khaki-bright);
+  background: rgba(0,0,0,0.6);
+  border: 1px solid rgba(0,0,0,0.8);
+  padding: 1px 4px;
+  border-radius: 2px;
+  line-height: 1;
+  min-width: 12px;
+  text-align: center;
+}
+.item-tile .ammo.empty { color: var(--rust-bright); border-color: var(--rust); }
+.item-tile.empty { opacity: 0.35; filter: grayscale(1) brightness(0.7); }
+.item-tile.empty:hover { transform: none; background: inherit; cursor: not-allowed; }
+.item-tile:disabled { cursor: not-allowed; }
+
 /* Fire button — loud, red, clearly separate from everything else */
 /* ── Fire button — ordnance-release module ── */
 .fire-btn {
@@ -827,15 +906,20 @@ html.mp-docked .mobile-drive { bottom: 172px; }
 html.mp-docked #phaser-host { bottom: 68px; }
 
 /* ── In-battle bottom bar ─────────────────────────────────────────────
-   When a match is in the playing phase we reserve a fixed strip at the
-   bottom of the viewport for HUD chrome (weapon tray, fire button,
-   minimap, chat) so none of it floats over the rendered terrain. The
-   Phaser host shrinks above it; bottom-anchored UI repositions inside
-   the bar; the music dock (if present) stacks underneath. */
+   Real container: holds chat, minimap, item/weapon trays, and fire
+   button as actual children laid out by CSS grid. Children inside the
+   bar are flow-positioned (not absolute), so resizing the viewport
+   rescales them together and nothing floats over the terrain. The
+   Phaser host shrinks above it; the music dock stacks underneath. */
 .battle-bottom-bar {
   position: fixed;
   left: 0; right: 0; bottom: 0;
   height: 160px;
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
   background:
     linear-gradient(180deg, rgba(20,16,12,0.92), rgba(8,6,4,0.98)),
     url("/textures/ui/plates.jpg");
@@ -843,79 +927,105 @@ html.mp-docked #phaser-host { bottom: 68px; }
   background-blend-mode: multiply, normal;
   border-top: 2px solid var(--khaki);
   box-shadow: 0 -8px 24px rgba(0,0,0,0.55);
-  pointer-events: none;
-  z-index: 1;
-}
-/* In-battle UI lifts above the bar's stacking context. Without explicit
-   z-index on these (most had auto), the bar's positive z-index hid them
-   inside its own stacking context. */
-html.battle-active .weapon-tray,
-html.battle-active .fire-btn,
-html.battle-active .minimap,
-html.battle-active .chat-panel,
-html.battle-active .hud-overlay,
-html.battle-active .turn-chip,
-html.battle-active .kill-feed,
-html.battle-active .mobile-drive {
   z-index: 5;
 }
-html.battle-active #phaser-host { bottom: 160px; }
-html.battle-active .weapon-tray { bottom: 18px; }
-html.battle-active .fire-btn { bottom: 14px; right: 20px; width: 124px; }
-html.battle-active .minimap { right: 156px; bottom: 36px; width: 200px; height: 84px; }
-html.battle-active .chat-panel {
-  bottom: 14px;
-  max-height: 130px;
-  width: 280px;
+.battle-bottom-bar .bar-section {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-width: 0;
 }
-html.battle-active .mobile-drive { bottom: 174px; }
+.battle-bottom-bar .bar-left { justify-content: stretch; }
+.battle-bottom-bar .bar-trays {
+  flex-direction: column;
+  gap: 6px;
+  justify-content: center;
+}
 
-/* In-bar elements drop their own panel chrome so the bar's surface
-   reads as one continuous strip instead of "panel inside panel". */
-html.battle-active .weapon-tray {
+/* Override absolute positioning of children inside the bar so they
+   participate in grid flow. They keep their floating layout outside
+   battle (lobby, etc.). */
+.battle-bottom-bar .weapon-tray,
+.battle-bottom-bar .item-tray {
+  position: static;
+  transform: none;
+  left: auto;
+  right: auto;
+  bottom: auto;
   background: none;
   border: none;
   box-shadow: none;
   padding: 0;
+  margin: 0;
 }
-html.battle-active .fire-btn-housing {
+.battle-bottom-bar .item-tray { opacity: 1; }
+.battle-bottom-bar .item-tray.idle { opacity: 0.4; }
+
+.battle-bottom-bar .fire-btn {
+  position: static;
+  width: 124px;
+  margin: 0;
+}
+.battle-bottom-bar .fire-btn-housing {
   background: none;
   border: none;
   box-shadow: none;
   height: auto;
   padding: 0;
 }
-html.battle-active .fire-btn-rivet { display: none; }
-html.battle-active .fire-btn-dome {
-  width: 84px;
-  height: 84px;
-}
-html.battle-active .fire-btn-label { font-size: 16px; }
-html.battle-active .minimap {
+.battle-bottom-bar .fire-btn-rivet { display: none; }
+.battle-bottom-bar .fire-btn-dome { width: 84px; height: 84px; }
+.battle-bottom-bar .fire-btn-label { font-size: 16px; }
+
+.battle-bottom-bar .minimap {
+  position: static;
+  width: 220px;
+  height: 100px;
+  margin: 0;
   background: rgba(0, 0, 0, 0.35);
   border-top-color: var(--khaki);
 }
-html.battle-active .chat-panel {
+.battle-bottom-bar .chat-panel {
+  position: static;
+  width: 100%;
+  max-width: 380px;
+  height: 100%;
+  max-height: 144px;
+  margin: 0;
   background: none;
   box-shadow: none;
   border: none;
   border-left: 2px solid var(--khaki);
 }
 
-/* Stack with music dock: bar lifts above the dock, in-bar UI lifts with
-   it, Phaser host shrinks by both. Override the plain mp-docked rules. */
+html.battle-active #phaser-host { bottom: 160px; }
+html.battle-active .hud-overlay,
+html.battle-active .turn-chip,
+html.battle-active .kill-feed,
+html.battle-active .mobile-drive {
+  z-index: 5;
+}
+html.battle-active .mobile-drive { bottom: 174px; }
+
+/* Stack with music dock: bar lifts above the dock; Phaser host shrinks
+   by both. */
 html.battle-active.mp-docked .battle-bottom-bar { bottom: 68px; }
 html.battle-active.mp-docked #phaser-host { bottom: 228px; }
-html.battle-active.mp-docked .weapon-tray { bottom: 86px; }
-html.battle-active.mp-docked .fire-btn { bottom: 82px; }
-html.battle-active.mp-docked .minimap { bottom: 104px; }
-html.battle-active.mp-docked .chat-panel { bottom: 82px; }
 html.battle-active.mp-docked .mobile-drive { bottom: 242px; }
 @media (max-width: 820px) {
-  .battle-bottom-bar { height: 120px; }
-  html.battle-active #phaser-host { bottom: 120px; }
-  html.battle-active.mp-docked #phaser-host { bottom: 188px; }
-  html.battle-active .fire-btn { bottom: 14px; }
+  .battle-bottom-bar {
+    height: 132px;
+    grid-template-columns: 1fr auto auto;
+    gap: 6px;
+    padding: 6px 8px;
+  }
+  .battle-bottom-bar .bar-minimap { display: none; }
+  .battle-bottom-bar .minimap { width: 160px; height: 76px; }
+  .battle-bottom-bar .fire-btn { width: 96px; }
+  .battle-bottom-bar .chat-panel { max-width: 260px; max-height: 116px; }
+  html.battle-active #phaser-host { bottom: 132px; }
+  html.battle-active.mp-docked #phaser-host { bottom: 200px; }
   html.battle-active .mobile-drive { bottom: 134px; }
   html.battle-active.mp-docked .mobile-drive { bottom: 202px; }
 }

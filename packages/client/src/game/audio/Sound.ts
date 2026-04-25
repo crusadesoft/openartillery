@@ -51,7 +51,6 @@ const MUSIC_POOLS: Record<MusicContext, Track[]> = {
   menu: [
     { title: "Meanwhile",        artist: "Scott Buckley", url: "/audio/music/meanwhile.mp3" },
     { title: "Penumbra",         artist: "Scott Buckley", url: "/audio/music/penumbra.mp3" },
-    { title: "Incantation",      artist: "Scott Buckley", url: "/audio/music/incantation.mp3" },
     { title: "Memories Of Stone",artist: "Scott Buckley", url: "/audio/music/memories_of_stone.mp3" },
     { title: "Convergence",      artist: "Scott Buckley", url: "/audio/music/convergence.mp3" },
     { title: "Echoes Of Home",   artist: "Scott Buckley", url: "/audio/music/echoes_of_home.mp3" },
@@ -234,26 +233,36 @@ class SoundManager {
   setWind(strength: number): void {
     const s = clamp01(strength);
     this.windStrength = s;
-    if (s <= 0) {
-      if (this.wind && this.windId != null) this.wind.volume(0, this.windId);
+    // Deadzone: below ~6% normalized wind, fully stop the loop instead
+    // of trickling silent audio. Server rolls non-zero wind per turn so
+    // a flat volume(0) call would still leave the channel running.
+    if (s < 0.06) {
+      if (this.wind && this.windId != null) {
+        this.wind.stop(this.windId);
+        this.windId = null;
+      }
       return;
     }
     if (!this.wind) {
       this.wind = new Howl({ src: [WIND_URL], loop: true, volume: 0 });
     }
     if (this.windId == null) this.windId = this.wind.play();
+    // Power curve makes low wind barely audible while keeping high wind
+    // prominent — matches the visual particle density.
+    const curve = s * s;
     const vol =
-      this.effective("master") * this.effective("sfx") * WIND_MAX_GAIN * s;
+      this.effective("master") * this.effective("sfx") * WIND_MAX_GAIN * curve;
     this.wind.volume(vol, this.windId);
   }
 
   private applyWindVolume(): void {
     if (!this.wind || this.windId == null) return;
+    const curve = this.windStrength * this.windStrength;
     const vol =
       this.effective("master") *
       this.effective("sfx") *
       WIND_MAX_GAIN *
-      this.windStrength;
+      curve;
     this.wind.volume(vol, this.windId);
   }
 

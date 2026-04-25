@@ -1,7 +1,5 @@
-import { useState } from "react";
 import {
   BOT_DIFFICULTIES,
-  BOT_DIFFICULTY_SPECS,
   type Player,
 } from "@artillery/shared";
 import { SfxButton } from "../SfxButton";
@@ -39,7 +37,6 @@ export function PlayerRoster({
   onSetTeam,
   onShuffleTeams,
 }: Props): JSX.Element {
-  const [botDifficulty, setBotDifficulty] = useState("normal");
   const isHost = selfId === hostId;
 
   const renderTeamBox = (p: Player) => {
@@ -149,11 +146,22 @@ export function PlayerRoster({
   return (
     <>
       <div className="lobby-stage-section-title">
-        Crew · {players.length}/{maxPlayers}
+        <span>Crew · {players.length}/{maxPlayers}</span>
+        <span style={{ flex: 1 }} />
+        {canAddBot && (
+          <SfxButton
+            className="ghost-btn"
+            style={{ padding: "2px 10px", fontSize: 11 }}
+            title="Add a normal-level bot. Cycle difficulty on the bot row."
+            onClick={() => { click(); onAddBot("normal"); }}
+          >
+            + Bot
+          </SfxButton>
+        )}
         {teamMode && canTweakSettings && (
           <SfxButton
             className="ghost-btn"
-            style={{ marginLeft: 10, padding: "2px 10px", fontSize: 11 }}
+            style={{ marginLeft: 6, padding: "2px 10px", fontSize: 11 }}
             onClick={onShuffleTeams}
           >
             Shuffle Teams
@@ -166,30 +174,6 @@ export function PlayerRoster({
           <li style={{ color: "var(--ink-faint)" }}>No one here yet.</li>
         )}
       </ul>
-
-      {canAddBot && (
-        <div className="lobby-stage-addbot">
-          <div className="lobby-stage-section-title">Add bot</div>
-          <div className="pill-row">
-            {BOT_DIFFICULTIES.map((d) => (
-              <div
-                key={d}
-                className={`pill ${botDifficulty === d ? "active" : ""}`}
-                onClick={() => { click(); setBotDifficulty(d); }}
-              >
-                {BOT_DIFFICULTY_SPECS[d].label}
-              </div>
-            ))}
-          </div>
-          <SfxButton
-            className="secondary-btn"
-            style={{ marginTop: 8, width: "100%" }}
-            onClick={() => onAddBot(botDifficulty)}
-          >
-            + Bot ({BOT_DIFFICULTY_SPECS[botDifficulty as "normal"].label})
-          </SfxButton>
-        </div>
-      )}
     </>
   );
 }

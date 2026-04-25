@@ -23,14 +23,14 @@ export function App(): JSX.Element {
 
   useEffect(() => { applySettingsOnBoot(); }, []);
 
-  // Swap between menu + battle tracks based on route. SFX + music init is
-  // lazy (browsers require a user gesture), so the first play in the session
-  // might be silent until the player clicks anything.
+  // Always start on the menu pool here. GameShell flips to "battle" once
+  // the match actually starts (phase === "playing") and back to "menu"
+  // when the match ends or the player leaves, so lobby/countdown stays
+  // calm and the epic battle tracks are reserved for in-game.
   useEffect(() => {
     Sound.init();
     Sound.installGesturePrimer();
-    if (route.name === "game") Sound.playMusic("battle");
-    else Sound.playMusic("menu");
+    Sound.playMusic("menu");
   }, [route.name]);
 
   if (loading) {

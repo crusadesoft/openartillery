@@ -12,7 +12,7 @@ interface Props {
 /**
  * Explicit fire button. Enabled only when it's your turn, you've aimed
  * above the minimum power, and no projectile is in flight. Keyboard
- * equivalents: SPACE or ENTER.
+ * equivalent: SPACE.
  */
 export function FireButton({ room, power, isMyTurn, hasFlight }: Props): JSX.Element {
   const ready = isMyTurn && power >= TANK.MIN_POWER && !hasFlight;
@@ -28,7 +28,7 @@ export function FireButton({ room, power, isMyTurn, hasFlight }: Props): JSX.Ele
       className={`fire-btn ${ready ? "ready" : ""}`}
       disabled={!ready}
       onClick={() => ready && room.send("fire", {})}
-      title="SPACE or ENTER to fire"
+      title="SPACE to fire"
       aria-label="Fire"
     >
       <span className="fire-btn-housing">

@@ -13,25 +13,26 @@ interface FloraCfg {
 }
 
 /**
- * Biome-aware terrain renderer. Draws sky + parallax mountains + ground +
- * flora + atmospheric props (clouds, moon/sun, aurora, embers) so each
- * biome reads as its own locale instead of a colored band.
+ * Biome-aware terrain renderer. Draws sky + parallax mountains + ground
+ * (stratified geology: grass cap → topsoil → dirt → bedrock, all masked
+ * by the heightmap so craters expose deeper layers) + flora +
+ * atmospheric props (clouds, moon/sun, aurora, embers) so each biome
+ * reads as its own locale instead of a colored band.
  */
-const BIOME_TEXTURE: Record<BiomeId, string> = {
-  grasslands: "terrain_grasslands",
-  desert: "terrain_desert",
-  arctic: "terrain_arctic",
-  lava: "terrain_lava",
-  dusk: "terrain_dusk",
-};
 
 export class TerrainView {
-  /** Shape of the heightmap, used as a geometry mask for the texture tiles. */
+  /** Shape of the heightmap, used as a geometry mask for the strata. */
   private maskShape: Phaser.GameObjects.Graphics;
-  /** Top-soil texture (surface colour). */
-  private topTile?: Phaser.GameObjects.TileSprite;
-  /** Deeper dirt — same texture with a darker tint for layered depth. */
-  private deepTile?: Phaser.GameObjects.TileSprite;
+  /** Stratified geology baked into a single canvas texture (topsoil →
+   *  dirt → bedrock + grit specks) and rendered as one Image so the
+   *  thousands of grit primitives don't cost a GL draw call each. The
+   *  Image is masked by the heightmap polygon so craters expose deeper
+   *  bands along their walls. */
+  private strataImg?: Phaser.GameObjects.Image;
+  /** Cache key currently bound to `strataImg`. Re-baked on biome change. */
+  private strataKey: string | null = null;
+  /** Thin grass / sand cap that hugs the surface line above the strata. */
+  private cap: Phaser.GameObjects.Graphics;
   private topline: Phaser.GameObjects.Graphics;
   private sky!: Phaser.GameObjects.Graphics;
   private mountainFar!: Phaser.GameObjects.Graphics;
@@ -56,6 +57,7 @@ export class TerrainView {
     this.mountainFar = scene.add.graphics().setDepth(-2).setScrollFactor(0.35);
     this.mountainNear = scene.add.graphics().setDepth(-1).setScrollFactor(0.6);
     this.maskShape = scene.add.graphics().setDepth(1).setVisible(false);
+    this.cap = scene.add.graphics().setDepth(1.6);
     this.topline = scene.add.graphics().setDepth(2);
     this.redraw();
   }
@@ -77,11 +79,15 @@ export class TerrainView {
   }
 
   private redraw(): void {
-    this.drawSky();
-    this.drawMountains();
-    this.drawGround();
-    this.scatterFlora();
-    this.installAtmosphere();
+    const biomeChanged = this.lastBiomeDrawn !== this.biome;
+    if (biomeChanged) {
+      this.drawSky();
+      this.drawMountains();
+      this.drawStaticGround();
+      this.scatterFlora();
+      this.installAtmosphere();
+    }
+    this.drawHeightGround();
   }
 
   private drawSky(): void {
@@ -183,13 +189,119 @@ export class TerrainView {
     drawSilhouette(this.mountainNear, palette.mountainNear, WORLD.WIDTH, 0.58, 0.09, 4.6, 0.85);
   }
 
-  private drawGround(): void {
+  /** Highest column — anchors strata thicknesses. Cached on biome
+   *  change; doesn't move when craters form so we can keep the strata
+   *  graphics static across crater redraws. */
+  private peakY = 0;
+
+  private drawStaticGround(): void {
     const palette = BIOMES[this.biome];
     const h = this.state.heights;
     const w = this.state.width || WORLD.WIDTH;
 
-    // 1) Rebuild the mask shape from the heightmap — single polygon
-    //    hugging the surface and dropping down to the bottom of the world.
+    let peakY: number = WORLD.HEIGHT;
+    for (let x = 0; x < w; x++) {
+      const y = h[x] ?? WORLD.HEIGHT;
+      if (y < peakY) peakY = y;
+    }
+    this.peakY = peakY;
+
+    const TOPSOIL_BAND = 130;
+    const BLEND_BAND = 60;
+    const DIRT_BAND = 260;
+    const topsoilEnd = peakY + TOPSOIL_BAND;
+    const dirtEnd = topsoilEnd + DIRT_BAND;
+
+    // Bake strata + grit into a single canvas-backed texture so the
+    // whole geology renders as one GPU draw call. Without this, each
+    // grit speck (~5000) becomes its own GL submission via Phaser
+    // Graphics — fine for one frame, brutal once the mask invalidates
+    // every crater and forces re-render.
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = WORLD.HEIGHT;
+    const ctx = canvas.getContext("2d")!;
+
+    const hex = (n: number) => `#${n.toString(16).padStart(6, "0")}`;
+    // Bands.
+    ctx.fillStyle = hex(palette.topsoil);
+    ctx.fillRect(0, peakY - 6, w, TOPSOIL_BAND - BLEND_BAND + 6);
+    const blend1 = ctx.createLinearGradient(0, topsoilEnd - BLEND_BAND, 0, topsoilEnd);
+    blend1.addColorStop(0, hex(palette.topsoil));
+    blend1.addColorStop(1, hex(palette.dirt));
+    ctx.fillStyle = blend1;
+    ctx.fillRect(0, topsoilEnd - BLEND_BAND, w, BLEND_BAND);
+    ctx.fillStyle = hex(palette.dirt);
+    ctx.fillRect(0, topsoilEnd, w, DIRT_BAND - BLEND_BAND);
+    const blend2 = ctx.createLinearGradient(0, dirtEnd - BLEND_BAND, 0, dirtEnd);
+    blend2.addColorStop(0, hex(palette.dirt));
+    blend2.addColorStop(1, hex(palette.bedrock));
+    ctx.fillStyle = blend2;
+    ctx.fillRect(0, dirtEnd - BLEND_BAND, w, BLEND_BAND);
+    ctx.fillStyle = hex(palette.bedrock);
+    ctx.fillRect(0, dirtEnd, w, WORLD.HEIGHT - dirtEnd);
+
+    // Grit specks — same logic as before, baked into the canvas.
+    const striaSeed = (this.state.seed || 1) >>> 0;
+    let s = striaSeed;
+    const rand = () => {
+      s = (s * 1664525 + 1013904223) >>> 0;
+      return s / 0xffffffff;
+    };
+    const rgba = (n: number, a: number) =>
+      `rgba(${(n >> 16) & 0xff},${(n >> 8) & 0xff},${n & 0xff},${a})`;
+    const speck = (
+      yMin: number, yMax: number, count: number, color: number,
+      minA: number, maxA: number,
+    ) => {
+      const span = Math.max(1, yMax - yMin);
+      for (let i = 0; i < count; i++) {
+        const x = rand() * w;
+        const y = yMin + rand() * span;
+        const r = 0.6 + rand() * 1.4;
+        const a = minA + rand() * (maxA - minA);
+        ctx.fillStyle = rgba(color, a);
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    };
+    speck(peakY, topsoilEnd, Math.floor(w * 0.5), palette.dirt, 0.25, 0.5);
+    speck(peakY, topsoilEnd, Math.floor(w * 0.18), palette.grass, 0.12, 0.3);
+    speck(topsoilEnd, dirtEnd, Math.floor(w * 0.7), palette.bedrock, 0.25, 0.55);
+    speck(topsoilEnd, dirtEnd, Math.floor(w * 0.25), palette.topsoil, 0.1, 0.25);
+    speck(dirtEnd, WORLD.HEIGHT, Math.floor(w * 0.4), 0x000000, 0.2, 0.45);
+    speck(dirtEnd, WORLD.HEIGHT, Math.floor(w * 0.08), palette.dirt, 0.1, 0.25);
+
+    // Register canvas as a Phaser texture and bind it to the strata
+    // image. Per-biome key so all five biomes can co-exist in cache
+    // (rapid-fire biome flips during dev / lobby preview).
+    const key = `strata_${this.biome}`;
+    if (this.scene.textures.exists(key)) this.scene.textures.remove(key);
+    this.scene.textures.addCanvas(key, canvas);
+    if (!this.strataImg) {
+      this.strataImg = this.scene.add
+        .image(0, 0, key)
+        .setOrigin(0, 0)
+        .setDepth(1);
+      this.strataImg.setMask(this.maskShape.createGeometryMask());
+    } else {
+      this.strataImg.setTexture(key);
+    }
+    this.strataKey = key;
+  }
+
+  /** Heightmap-dependent passes — runs on every crater redraw. Cheap:
+   *  one polygon for the mask, one for the cap, one polyline for the
+   *  topline. Strata + grit textures cached by drawStaticGround stay
+   *  put and re-mask automatically because GeometryMask references the
+   *  maskShape graphics by ref. */
+  private drawHeightGround(): void {
+    const palette = BIOMES[this.biome];
+    const h = this.state.heights;
+    const w = this.state.width || WORLD.WIDTH;
+
+    // 1) Rebuild the mask polygon from the current heightmap.
     this.maskShape.clear();
     this.maskShape.fillStyle(0xffffff, 1);
     this.maskShape.beginPath();
@@ -202,33 +314,18 @@ export class TerrainView {
     this.maskShape.closePath();
     this.maskShape.fillPath();
 
-    // 2) Ensure TileSprite + deep-fill exist, textured to the current biome.
-    const texKey = BIOME_TEXTURE[this.biome];
-    if (!this.topTile) {
-      this.topTile = this.scene.add
-        .tileSprite(0, 0, WORLD.WIDTH, WORLD.HEIGHT, texKey)
-        .setOrigin(0, 0)
-        .setDepth(1);
-      this.deepTile = this.scene.add
-        .tileSprite(0, 0, WORLD.WIDTH, WORLD.HEIGHT, "terrain_rock")
-        .setOrigin(0, 0)
-        .setDepth(0.9)
-        .setAlpha(0.7);
-      const mask = this.maskShape.createGeometryMask();
-      this.topTile.setMask(mask);
-      this.deepTile.setMask(mask);
-    } else {
-      this.topTile.setTexture(texKey);
-    }
+    // 2) Grass / sand cap — thin coloured strip hugging the surface.
+    const CAP_PX = 6;
+    this.cap.clear();
+    this.cap.fillStyle(palette.grass, 1);
+    this.cap.beginPath();
+    this.cap.moveTo(0, h[0] ?? WORLD.HEIGHT);
+    for (let x = 0; x < w; x++) this.cap.lineTo(x, h[x] ?? WORLD.HEIGHT);
+    for (let x = w - 1; x >= 0; x--) this.cap.lineTo(x, (h[x] ?? WORLD.HEIGHT) + CAP_PX);
+    this.cap.closePath();
+    this.cap.fillPath();
 
-    // Warm the top-soil with a slight biome tint so adjacent biomes read
-    // distinct even with similar photographic textures.
-    this.topTile.setTint(palette.topsoil);
-    this.topTile.tileScaleX = 0.8;
-    this.topTile.tileScaleY = 0.8;
-
-    // 3) Grass / bright top-line accent strip — kept as a thin graphic above
-    //    the texture so the silhouette reads sharply against the sky.
+    // 3) Topline — bright accent on the silhouette + soft shadow line.
     this.topline.clear();
     this.topline.lineStyle(2, palette.grass, 1);
     this.topline.beginPath();
@@ -241,7 +338,7 @@ export class TerrainView {
     this.topline.lineStyle(1, 0x000000, 0.35);
     this.topline.beginPath();
     for (let x = 0; x < w; x++) {
-      const y = (h[x] ?? WORLD.HEIGHT) + 2;
+      const y = (h[x] ?? WORLD.HEIGHT) + CAP_PX + 1;
       if (x === 0) this.topline.moveTo(x, y);
       else this.topline.lineTo(x, y);
     }
@@ -309,8 +406,11 @@ export class TerrainView {
 
   destroy(): void {
     this.maskShape.destroy();
-    this.topTile?.destroy();
-    this.deepTile?.destroy();
+    this.strataImg?.destroy();
+    if (this.strataKey && this.scene.textures.exists(this.strataKey)) {
+      this.scene.textures.remove(this.strataKey);
+    }
+    this.cap.destroy();
     this.topline.destroy();
     this.sky.destroy();
     this.mountainFar.destroy();

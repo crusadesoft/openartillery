@@ -40,6 +40,13 @@ export interface WeaponDef {
   addsTerrain?: boolean;
   /** bounces before detonation (0 = explode on impact) */
   bounces?: number;
+  /** detonate after lingering at low speed; used for grenade-style rolls */
+  restDetonate?: {
+    /** seconds at low speed before detonation */
+    afterSec: number;
+    /** px/s; below this counts as "at rest". Default 40. */
+    speedThreshold?: number;
+  };
   /** lingering fire patch: seconds of persistence; damage per tick radius */
   napalm?: {
     durationSec: number;

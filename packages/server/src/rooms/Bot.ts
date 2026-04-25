@@ -26,6 +26,10 @@ export class BotBrain {
   private moveDir: -1 | 0 | 1 = 0;
   /** wall-clock ms when the bot should stop driving and start aiming. */
   private moveUntil = 0;
+  /** wall-clock ms before which the bot does nothing — gives turns a
+   *  human-paced "thinking" beat at the top instead of snapping straight
+   *  into reposition/aim. Re-rolled each turn for variety. */
+  private thinkUntil = 0;
 
   constructor(
     public readonly sessionId: string,
@@ -97,6 +101,9 @@ export class BotBrain {
     // the bot's new x.
     this.recalcAim(p);
     this.holdUntil = 0;
+    // Random "thinking" pause before any action. 0.6–1.6s feels natural
+    // and breaks the rapid-fire cadence that bots otherwise have.
+    this.thinkUntil = Date.now() + 600 + Math.random() * 1000;
   }
 
   /** Drive input produced by the bot this frame — BattleRoom feeds this
@@ -166,6 +173,8 @@ export class BotBrain {
       this.state = "done";
       return;
     }
+    // Top-level pause: noop until the per-turn "thinking" delay elapses.
+    if (now < this.thinkUntil) return;
     if (this.state === "moving") {
       // End the drive once the budget runs out, or if we've run dry on
       // fuel so we don't spend the rest of the turn spinning on empty.
@@ -179,7 +188,7 @@ export class BotBrain {
     }
     if (this.state === "aiming") {
       const diff = this.targetAngle - p.angle;
-      const step = Math.sign(diff) * TANK.AIM_RATE_DEG_PER_SEC * dt * 2.0;
+      const step = Math.sign(diff) * TANK.AIM_RATE_DEG_PER_SEC * dt * 1.2;
       if (Math.abs(diff) <= Math.abs(step) + 0.5) {
         p.angle = this.targetAngle;
         this.state = "firing";
@@ -194,12 +203,14 @@ export class BotBrain {
       } else {
         p.power = Math.min(
           TANK.MAX_POWER,
-          p.power + TANK.POWER_CHARGE_RATE * dt * 2.0,
+          p.power + TANK.POWER_CHARGE_RATE * dt * 1.2,
         );
         if (p.power >= this.targetPower) {
           p.charging = false;
           this.state = "done";
-          this.holdUntil = now;
+          // Pre-fire pause so the trigger doesn't snap the instant the
+          // gauge fills. 0.3–0.9s of randomness adds breathing room.
+          this.holdUntil = now + 300 + Math.random() * 600;
         }
       }
     }

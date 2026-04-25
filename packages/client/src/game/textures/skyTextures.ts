@@ -1,22 +1,5 @@
 import Phaser from "phaser";
 
-export function makeCloud(scene: Phaser.Scene, key: string, w: number, h: number): void {
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d")!;
-  const grad = ctx.createLinearGradient(0, 0, 0, h);
-  grad.addColorStop(0, "rgba(255,255,255,0.9)");
-  grad.addColorStop(1, "rgba(255,255,255,0.4)");
-  ctx.fillStyle = grad;
-  ctx.beginPath();
-  ctx.ellipse(w * 0.35, h * 0.55, w * 0.35, h * 0.45, 0, 0, Math.PI * 2);
-  ctx.ellipse(w * 0.65, h * 0.55, w * 0.3, h * 0.45, 0, 0, Math.PI * 2);
-  ctx.ellipse(w * 0.5, h * 0.45, w * 0.22, h * 0.35, 0, 0, Math.PI * 2);
-  ctx.fill();
-  scene.textures.addCanvas(key, canvas);
-}
-
 export function makeMoon(scene: Phaser.Scene, key: string, d: number): void {
   const canvas = document.createElement("canvas");
   canvas.width = d;

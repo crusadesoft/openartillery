@@ -8,6 +8,7 @@ import type {
 } from "@artillery/shared";
 import { MODES, POST_MATCH_RECAP_MS, type GameMode } from "@artillery/shared";
 import { PhaserGame } from "../game/PhaserGame";
+import { Sound } from "../game/audio/Sound";
 import { ChatPanel } from "./ChatPanel";
 import { HudOverlay } from "./HudOverlay";
 import { Lobby } from "./Lobby";
@@ -17,6 +18,7 @@ import { Minimap } from "./Minimap";
 import { MatchEndOverlay } from "./MatchEndOverlay";
 import { TurnChip } from "./TurnChip";
 import { WeaponTray } from "./WeaponTray";
+import { ItemTray } from "./ItemTray";
 import { FireButton } from "./FireButton";
 import { PauseMenu } from "./PauseMenu";
 
@@ -60,6 +62,17 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
       window.dispatchEvent(new Event("resize"));
     };
   }, [phase]);
+
+  // Swap to the battle music pool only when the match is actually under
+  // way; lobby (waiting/countdown) and the post-match recap stay on the
+  // calm menu loop. The unmount cleanup covers the player-leaves path.
+  useEffect(() => {
+    if (phase === "playing") Sound.playMusic("battle");
+    else Sound.playMusic("menu");
+  }, [phase]);
+  useEffect(() => {
+    return () => { Sound.playMusic("menu"); };
+  }, []);
 
   // Ref-guarded so React StrictMode's double-mount doesn't double-register
   // the event listener (which was causing chat messages to appear twice).
@@ -202,7 +215,6 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
 
       {phase === "playing" && (
         <>
-          <div className="battle-bottom-bar" aria-hidden />
           <TurnChip
             current={currentPlayer}
             isMyTurn={isMyTurn}
@@ -211,7 +223,6 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
             tick={tick}
           />
           <KillFeed event={lastKill} />
-          <Minimap room={room} tick={tick} />
           <HudOverlay
             players={players}
             self={self}
@@ -220,20 +231,38 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
             teamMode={room.state.teamMode}
             teamCount={room.state.teamCount}
           />
-          <WeaponTray
-            room={room}
-            self={self}
-            currentWeapon={(self?.weapon ?? "shell") as WeaponId}
-            isMyTurn={isMyTurn}
-            locked={!isMyTurn || hasFlight || !!self?.dead}
-          />
-          <FireButton
-            room={room}
-            power={selfPower}
-            isMyTurn={isMyTurn}
-            hasFlight={hasFlight}
-          />
           <MobileControls room={room} />
+          <div className="battle-bottom-bar">
+            <div className="bar-section bar-left">
+              <ChatPanel entries={chat} onSend={sendChat} />
+            </div>
+            <div className="bar-section bar-minimap">
+              <Minimap room={room} tick={tick} />
+            </div>
+            <div className="bar-section bar-trays">
+              <ItemTray
+                room={room}
+                self={self}
+                isMyTurn={isMyTurn}
+                locked={!isMyTurn || hasFlight || !!self?.dead}
+              />
+              <WeaponTray
+                room={room}
+                self={self}
+                currentWeapon={(self?.weapon ?? "shell") as WeaponId}
+                isMyTurn={isMyTurn}
+                locked={!isMyTurn || hasFlight || !!self?.dead}
+              />
+            </div>
+            <div className="bar-section bar-fire">
+              <FireButton
+                room={room}
+                power={selfPower}
+                isMyTurn={isMyTurn}
+                hasFlight={hasFlight}
+              />
+            </div>
+          </div>
         </>
       )}
 
@@ -241,7 +270,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
         <MatchEndOverlay room={room} secondsLeft={recapSecondsLeft} ranked={ranked} />
       )}
 
-      {!inLobby && <ChatPanel entries={chat} onSend={sendChat} />}
+      {phase === "ended" && <ChatPanel entries={chat} onSend={sendChat} />}
       <PauseMenu onLeave={onLeave} />
     </div>
   );

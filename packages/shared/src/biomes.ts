@@ -9,6 +9,8 @@ export interface BiomePalette {
   topsoil: number;
   /** deep ground fill */
   dirt: number;
+  /** bedrock fill — exposed only when craters cut deep */
+  bedrock: number;
   /** ambient sky tones, linearly sampled top → bottom */
   skyTop: number;
   skyBottom: number;
@@ -30,6 +32,7 @@ export const BIOMES: Record<BiomeId, BiomePalette> = {
     grass: 0x8ae66e,
     topsoil: 0x6b4a2a,
     dirt: 0x3a2a1e,
+    bedrock: 0x14100c,
     skyTop: 0x1d2a55,
     skyBottom: 0x05070f,
     mountainFar: 0x1a2547,
@@ -44,6 +47,7 @@ export const BIOMES: Record<BiomeId, BiomePalette> = {
     grass: 0xffb347,
     topsoil: 0xc47a27,
     dirt: 0x5a3b16,
+    bedrock: 0x2a1606,
     skyTop: 0x3a2a55,
     skyBottom: 0xff7b38,
     mountainFar: 0x47325a,
@@ -58,6 +62,7 @@ export const BIOMES: Record<BiomeId, BiomePalette> = {
     grass: 0xecf5ff,
     topsoil: 0xa3c6e5,
     dirt: 0x4a6a8a,
+    bedrock: 0x1e2c40,
     skyTop: 0x0a1f3e,
     skyBottom: 0x2a4a7a,
     mountainFar: 0x2a3a6a,
@@ -72,6 +77,7 @@ export const BIOMES: Record<BiomeId, BiomePalette> = {
     grass: 0xff4a2e,
     topsoil: 0x8a2a1a,
     dirt: 0x2a0a0a,
+    bedrock: 0x0a0202,
     skyTop: 0x2a0a1a,
     skyBottom: 0x1a0505,
     mountainFar: 0x1a0a1a,
@@ -86,6 +92,7 @@ export const BIOMES: Record<BiomeId, BiomePalette> = {
     grass: 0xffc56e,
     topsoil: 0x8a4a3a,
     dirt: 0x3a1a2a,
+    bedrock: 0x180810,
     skyTop: 0x2b1760,
     skyBottom: 0xff6b8a,
     mountainFar: 0x3a205a,
