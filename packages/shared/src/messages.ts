@@ -1,3 +1,4 @@
+import type { ItemId } from "./items.js";
 import type { WeaponId } from "./weapons.js";
 
 /** Messages sent from client → server. */
@@ -56,7 +57,15 @@ export type ServerEvent =
   | { type: "death"; tankId: string }
   | { type: "turn"; tankId: string; endsAt: number; turnNumber: number }
   | { type: "gameOver"; winnerId: string | null }
-  | { type: "chat"; name: string; text: string; at: number };
+  | { type: "chat"; name: string; text: string; at: number }
+  | {
+      type: "item";
+      tankId: string;
+      item: ItemId;
+      x: number;
+      y: number;
+      from?: { x: number; y: number };
+    };
 
 export const MESSAGE_KINDS = {
   INPUT: "input",

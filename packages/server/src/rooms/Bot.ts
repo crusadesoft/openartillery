@@ -1,6 +1,8 @@
 import {
   BOT_DIFFICULTY_SPECS,
   type BotDifficulty,
+  ITEM_TUNING,
+  type ItemId,
   Player,
   TANK,
   WEAPONS,
@@ -17,7 +19,13 @@ import type { World } from "../physics/World.js";
  * physics layer.
  */
 export class BotBrain {
-  private state: "idle" | "moving" | "aiming" | "firing" | "done" = "idle";
+  private state:
+    | "idle"
+    | "moving"
+    | "aiming"
+    | "firing"
+    | "using_item"
+    | "done" = "idle";
   private targetAngle = 45;
   private targetPower = 600;
   private holdUntil = 0;
@@ -30,6 +38,9 @@ export class BotBrain {
    *  human-paced "thinking" beat at the top instead of snapping straight
    *  into reposition/aim. Re-rolled each turn for variety. */
   private thinkUntil = 0;
+  /** Set in startTurn() when the brain elects to use an item this turn.
+   *  Drained by `wantsToUseItem` once the pre-action pause elapses. */
+  private plannedItem: { id: ItemId; target?: { x: number; y: number } } | null = null;
 
   constructor(
     public readonly sessionId: string,
@@ -41,8 +52,9 @@ export class BotBrain {
 
   setDifficulty(d: BotDifficulty): void { this.difficulty = d; }
 
-  startTurn(p: Player): void {
+  startTurn(p: Player, startingHp: number): void {
     const spec = BOT_DIFFICULTY_SPECS[this.difficulty];
+    this.plannedItem = null;
 
     // Choose a weapon from the difficulty's pool, skipping any that are
     // out of ammo so the bot doesn't lock itself on an exhausted slot.
@@ -60,6 +72,22 @@ export class BotBrain {
     }
 
     const target = this.pickTarget(p);
+
+    // Decide whether to use an item this turn instead of shooting.
+    // Items end the turn so the brain commits and skips the move/aim/fire
+    // pipeline.
+    const item = this.planItem(p, target, startingHp);
+    if (item) {
+      this.plannedItem = item;
+      this.state = "using_item";
+      this.moveDir = 0;
+      this.moveUntil = 0;
+      // Same think pause as a normal turn; consume gates on it via holdUntil.
+      this.thinkUntil = Date.now() + 600 + Math.random() * 1000;
+      this.holdUntil = this.thinkUntil + 200 + Math.random() * 400;
+      return;
+    }
+
     if (!target) {
       this.state = "firing";
       this.targetPower = TANK.MIN_POWER;
@@ -136,15 +164,29 @@ export class BotBrain {
     const dy = target.y - p.y;
     p.facing = dx >= 0 ? 1 : -1;
     const g = WORLD.GRAVITY;
-    const basePower = 700 + Math.random() * 280;
-    const v = basePower;
     const horizontal = Math.abs(dx);
     const vertical = -dy;
+    // Pick power from the required range instead of a fixed 700–980 band.
+    // For a chosen launch angle θ, the velocity that lands a round at
+    // (horizontal, vertical) is v² = g·x² / (2·cos²θ·(x·tanθ − vertical)).
+    // θ_ref = 58° gives a high arc that clears terrain at any reasonable
+    // range; pad v 5% so the high-angle quartic below has a real root.
+    const thetaRef = (58 * Math.PI) / 180;
+    const cosRef = Math.cos(thetaRef);
+    const tanRef = Math.tan(thetaRef);
+    const denom = 2 * cosRef * cosRef * (horizontal * tanRef - vertical);
+    let v: number;
+    if (denom <= 0) {
+      v = TANK.MAX_POWER * 0.6;
+    } else {
+      v = Math.sqrt((g * horizontal * horizontal) / denom) * 1.05;
+    }
+    v = clamp(v, TANK.MIN_POWER + 80, TANK.MAX_POWER);
     const discriminant =
       v ** 4 - g * (g * horizontal * horizontal + 2 * vertical * v ** 2);
     let angleDeg: number;
     if (discriminant < 0) {
-      angleDeg = 55;
+      angleDeg = 58;
     } else {
       const sq = Math.sqrt(discriminant);
       const hi = Math.atan2(v * v + sq, g * horizontal);
@@ -175,6 +217,9 @@ export class BotBrain {
     }
     // Top-level pause: noop until the per-turn "thinking" delay elapses.
     if (now < this.thinkUntil) return;
+    // Item use: idle until BattleRoom picks up wantsToUseItem; the brain
+    // doesn't drive movement or aim during the pre-use pause.
+    if (this.state === "using_item") return;
     if (this.state === "moving") {
       // End the drive once the budget runs out, or if we've run dry on
       // fuel so we don't spend the rest of the turn spinning on empty.
@@ -222,6 +267,79 @@ export class BotBrain {
 
   consumeFire(): void {
     this.holdUntil = 0;
+  }
+
+  /** When the bot picks an item at startTurn, expose it once the pre-use
+   *  pause elapses so BattleRoom can fire the effect through the same
+   *  path a human would. Returns null until then (and after consume). */
+  wantsToUseItem(now: number): { id: ItemId; target?: { x: number; y: number } } | null {
+    if (this.state !== "using_item") return null;
+    if (!this.plannedItem) return null;
+    if (now < this.holdUntil) return null;
+    return this.plannedItem;
+  }
+
+  consumeItem(): void {
+    this.plannedItem = null;
+    this.holdUntil = 0;
+    this.state = "done";
+  }
+
+  /** Per-turn item picker. Priority: heal when below the repair-restore
+   *  threshold, shield when low, teleport when very low, otherwise a
+   *  small chance to jetpack toward the chosen target. Difficulty
+   *  scales overall use rate so easy bots barely tap items and hard
+   *  bots play them aggressively. Returns null if the bot should shoot
+   *  this turn. */
+  private planItem(
+    p: Player,
+    target: Player | null,
+    startingHp: number,
+  ): { id: ItemId; target?: { x: number; y: number } } | null {
+    const charges = (id: ItemId) => p.items.get(id) ?? 0;
+    const useRateScale =
+      this.difficulty === "hard" ? 1 : this.difficulty === "easy" ? 0.45 : 0.75;
+
+    // Repair when the heal won't be wasted.
+    if (charges("repair") > 0 && p.hp <= startingHp - ITEM_TUNING.repair.hpRestore) {
+      const chance = (p.hp <= startingHp * 0.4 ? 0.85 : 0.45) * useRateScale;
+      if (Math.random() < chance) return { id: "repair" };
+    }
+
+    // Shield up when bleeding and not already shielded.
+    const shielded = (p.shieldExpiresAt ?? 0) > Date.now();
+    if (charges("shield") > 0 && !shielded && p.hp <= startingHp * 0.5) {
+      const chance = (p.hp <= startingHp * 0.3 ? 0.7 : 0.35) * useRateScale;
+      if (Math.random() < chance) return { id: "shield" };
+    }
+
+    // Teleport as a panic button when very low and have one.
+    if (charges("teleport") > 0 && p.hp <= startingHp * 0.3) {
+      const chance = 0.5 * useRateScale;
+      if (Math.random() < chance) return { id: "teleport" };
+    }
+
+    // Jetpack: pick a landing spot toward the target within range. Used
+    // sparingly because spending the turn moving instead of shooting
+    // costs damage opportunity.
+    if (charges("jetpack") > 0 && target) {
+      const chance = 0.08 * useRateScale;
+      if (Math.random() < chance) {
+        const range = ITEM_TUNING.jetpack.maxRange;
+        const dx = target.x - p.x;
+        const dy = target.y - p.y;
+        const dist = Math.hypot(dx, dy) || 1;
+        // Hop most of the way (or `range`, whichever is shorter) toward
+        // the target, with a slight upward bias so we don't slam into
+        // terrain on the way.
+        const step = Math.min(range * 0.85, dist * 0.6);
+        const tx = p.x + (dx / dist) * step;
+        const ty = p.y + (dy / dist) * step - 30;
+        return { id: "jetpack", target: { x: tx, y: ty } };
+      }
+    }
+
+    return null;
   }
 
   private pickTarget(self: Player): Player | null {

@@ -595,13 +595,53 @@ export class BattleRoom extends Room<BattleState> {
     if (remaining <= 0) return;
     const id = item as ItemId;
     if (TARGETED_ITEMS.has(id) && !target) return;
+    const fromX = p.x;
+    const fromY = p.y;
     const ok = this.applyItemEffect(p, id, target);
     if (!ok) return;
     p.items.set(id, remaining - 1);
     this.turnFired = true;
-    this.broadcastEvent({ type: "item", tankId: p.id, item: id, x: p.x, y: p.y });
+    this.broadcastEvent({
+      type: "item",
+      tankId: p.id,
+      item: id,
+      x: p.x,
+      y: p.y,
+      from: { x: fromX, y: fromY },
+    });
     this.logEvent({ kind: "item", id: p.id, item: id });
     this.scheduleEndOfTurn();
+  }
+
+  /** Bot equivalent of handleUseItem — bypasses turn/auth checks
+   *  because the caller (`tick`) already verified it's the bot's turn
+   *  and the brain decided to fire. Mirrors the broadcast/logging side
+   *  effects so clients animate identically to a human use. */
+  private applyBotItem(
+    p: Player,
+    id: ItemId,
+    target: { x: number; y: number } | undefined,
+  ): boolean {
+    if (this.turnFired) return false;
+    const remaining = p.items.get(id) ?? 0;
+    if (remaining <= 0) return false;
+    const fromX = p.x;
+    const fromY = p.y;
+    const ok = this.applyItemEffect(p, id, target);
+    if (!ok) return false;
+    p.items.set(id, remaining - 1);
+    this.turnFired = true;
+    this.broadcastEvent({
+      type: "item",
+      tankId: p.id,
+      item: id,
+      x: p.x,
+      y: p.y,
+      from: { x: fromX, y: fromY },
+    });
+    this.logEvent({ kind: "item", id: p.id, item: id });
+    this.scheduleEndOfTurn();
+    return true;
   }
 
   private applyItemEffect(
@@ -1084,7 +1124,7 @@ export class BattleRoom extends Room<BattleState> {
     this.state.turnNumber += 1;
     this.nextTurnAt = 0;
     const meta = this.sessions.get(id);
-    if (meta?.bot) meta.bot.startTurn(p);
+    if (meta?.bot) meta.bot.startTurn(p, this.state.startingHp);
     this.broadcastEvent({
       type: "turn",
       tankId: id,
@@ -1115,7 +1155,11 @@ export class BattleRoom extends Room<BattleState> {
               this.world.applyInput(p, botInput, this.dt);
             }
           }
-          if (meta.bot.wantsToFire(now)) {
+          const itemPlan = meta.bot.wantsToUseItem(now);
+          if (itemPlan) {
+            this.applyBotItem(p, itemPlan.id, itemPlan.target);
+            meta.bot.consumeItem();
+          } else if (meta.bot.wantsToFire(now)) {
             // Ensure world.fire() sees a chargeable state.
             if (!p.charging) p.charging = true;
             this.fireCurrent(p);

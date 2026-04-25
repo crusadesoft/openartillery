@@ -81,12 +81,30 @@ if (config.ENABLE_COLYSEUS_MONITOR) {
 }
 
 // Serve built client in production.
+//
+// Cache strategy: anything under `/assets/` is Vite's content-hashed
+// bundle — the URL changes whenever the file does, so we mark those
+// `immutable` for a year. Everything else (notably `index.html`, which
+// pins the asset URLs) gets `no-cache` so browsers + Cloudflare always
+// revalidate. Without this, post-deploy users keep loading the old
+// index.html from cache and chase asset URLs that no longer exist.
 const clientDist = path.resolve(__dirname, "../../client/dist");
-app.use(express.static(clientDist));
+app.use(
+  express.static(clientDist, {
+    setHeaders: (res, filePath) => {
+      if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+        res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else {
+        res.setHeader("Cache-Control", "no-cache");
+      }
+    },
+  }),
+);
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/colyseus") || req.path.startsWith("/metrics") || req.path.startsWith("/health")) {
     return next();
   }
+  res.setHeader("Cache-Control", "no-cache");
   res.sendFile(path.join(clientDist, "index.html"), (err) => {
     if (err) next();
   });

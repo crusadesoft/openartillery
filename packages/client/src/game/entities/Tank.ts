@@ -53,6 +53,13 @@ export class TankView {
   private lastHp: number = TANK.MAX_HP;
   private fireEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
   private smokeEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
+  /** When set, sync() ignores server-driven position so a client-side
+   *  jetpack tween can render the parabolic flight without the
+   *  authoritative-position teleport stomping over it. Cleared once the
+   *  flight finishes. */
+  private flying = false;
+  private flightTween?: Phaser.Tweens.Tween;
+  private thrustEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   constructor(private scene: Phaser.Scene, public player: Player) {
     const c = scene.add.container(player.x, player.y);
@@ -125,11 +132,13 @@ export class TankView {
 
   sync(player: Player, isCurrentTurn: boolean, slopeDeg = 0): void {
     this.player = player;
-    this.container.setPosition(player.x, player.y);
+    if (!this.flying) {
+      this.container.setPosition(player.x, player.y);
+      this.container.setRotation(
+        ((slopeDeg + (player.dead ? 14 : 0)) * Math.PI) / 180,
+      );
+    }
     this.container.setAlpha(player.dead ? 0.6 : 1);
-    this.container.setRotation(
-      ((slopeDeg + (player.dead ? 14 : 0)) * Math.PI) / 180,
-    );
 
     const angleRad = (player.angle * Math.PI) / 180;
 
@@ -154,7 +163,9 @@ export class TankView {
     this.barrel.setTint(player.dead ? 0x2a1818 : 0xffffff);
 
     this.turnRing.setVisible(isCurrentTurn && !player.dead);
-    this.label.setPosition(player.x, player.y - 34);
+    const lx = this.flying ? this.container.x : player.x;
+    const ly = this.flying ? this.container.y : player.y;
+    this.label.setPosition(lx, ly - 34);
     (this.label as unknown as { setAlpha: (a: number) => void }).setAlpha(
       player.dead ? 0.4 : 1,
     );
@@ -166,9 +177,67 @@ export class TankView {
       this.spawnWreckFire();
     }
     if (this.fireEmitter) {
-      this.fireEmitter.setPosition(player.x, player.y - 4);
-      this.smokeEmitter?.setPosition(player.x, player.y - 12);
+      this.fireEmitter.setPosition(lx, ly - 4);
+      this.smokeEmitter?.setPosition(lx, ly - 12);
     }
+  }
+
+  /** Animate a jetpack hop from `from` to `to` over ~900ms. While flying,
+   *  `sync` skips authoritative-position writes so the parabolic flight
+   *  isn't yanked back to the destination on each state patch. Spawns
+   *  thrust particles tracking the container so the visual reads as
+   *  rocket-propelled, not a teleport. */
+  playJetpack(from: { x: number; y: number }, to: { x: number; y: number }): void {
+    if (this.flightTween) this.flightTween.stop();
+    this.thrustEmitter?.destroy();
+    this.flying = true;
+    this.container.setPosition(from.x, from.y);
+    this.container.setRotation(0);
+
+    const peakLift = Math.max(60, Math.min(180, Math.hypot(to.x - from.x, to.y - from.y) * 0.35));
+    const duration = 900;
+
+    this.thrustEmitter = this.scene.add
+      .particles(from.x, from.y + 8, "spark", {
+        lifespan: 380,
+        speedY: { min: 60, max: 160 },
+        speedX: { min: -30, max: 30 },
+        scale: { start: 0.9, end: 0 },
+        tint: [0xfff1a8, 0xffa23a, 0xff5e3a],
+        blendMode: Phaser.BlendModes.ADD,
+        quantity: 2,
+        frequency: 22,
+      })
+      .setDepth(9);
+
+    const t0 = { v: 0 };
+    this.flightTween = this.scene.tweens.add({
+      targets: t0,
+      v: 1,
+      duration,
+      ease: "Sine.easeInOut",
+      onUpdate: () => {
+        const u = t0.v;
+        const x = from.x + (to.x - from.x) * u;
+        // Parabola peaking at u=0.5 — lifts the path above the chord so
+        // the hop reads as flight rather than a slide.
+        const y = from.y + (to.y - from.y) * u - peakLift * 4 * u * (1 - u);
+        this.container.setPosition(x, y);
+        const dx = to.x - from.x;
+        const tilt = Math.sign(dx) * Math.sin(u * Math.PI) * 0.18;
+        this.container.setRotation(tilt);
+        this.thrustEmitter?.setPosition(x, y + 8);
+      },
+      onComplete: () => {
+        this.flying = false;
+        this.container.setPosition(to.x, to.y);
+        this.container.setRotation(0);
+        this.thrustEmitter?.stop();
+        const em = this.thrustEmitter;
+        this.thrustEmitter = undefined;
+        if (em) this.scene.time.delayedCall(500, () => em.destroy());
+      },
+    });
   }
 
   private spawnWreckFire(): void {
@@ -218,6 +287,8 @@ export class TankView {
   }
 
   destroy(): void {
+    this.flightTween?.stop();
+    this.thrustEmitter?.destroy();
     this.container.destroy(true);
     this.label.destroy();
   }

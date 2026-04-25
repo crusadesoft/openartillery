@@ -40,7 +40,7 @@ export class TerrainView {
   private celestial?: Phaser.GameObjects.Image;
   private aurora?: Phaser.GameObjects.Graphics;
   private clouds: Phaser.GameObjects.Image[] = [];
-  private flora: Phaser.GameObjects.Image[] = [];
+  private flora: { img: Phaser.GameObjects.Image; x: number; anchorY: number }[] = [];
   private emberEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
 
   private dirty = true;
@@ -74,6 +74,7 @@ export class TerrainView {
   update(): void {
     if (!this.dirty && this.lastBiomeDrawn === this.biome) return;
     this.redraw();
+    this.cullFlora();
     this.dirty = false;
     this.lastBiomeDrawn = this.biome;
   }
@@ -346,7 +347,7 @@ export class TerrainView {
   }
 
   private scatterFlora(): void {
-    this.flora.forEach((f) => f.destroy());
+    this.flora.forEach((f) => f.img.destroy());
     this.flora = [];
     const heights = this.state.heights;
     const w = this.state.width || WORLD.WIDTH;
@@ -369,9 +370,30 @@ export class TerrainView {
           img.setTint((tone << 16) | (tone << 8) | tone);
         }
         if (Math.random() < 0.5) img.setFlipX(true);
-        this.flora.push(img);
+        this.flora.push({ img, x, anchorY: terrY });
       }
     }
+  }
+
+  /** Drop any flora whose anchor column has dropped (crater). Y grows
+   *  downward, so heights[x] > anchorY + tolerance means the ground that
+   *  used to support this sprite has been blown away. */
+  private cullFlora(): void {
+    if (this.flora.length === 0) return;
+    const heights = this.state.heights;
+    const w = this.state.width || WORLD.WIDTH;
+    const TOLERANCE = 4;
+    const kept: typeof this.flora = [];
+    for (const f of this.flora) {
+      const col = Math.max(0, Math.min(w - 1, Math.floor(f.x)));
+      const terrY = heights[col] ?? WORLD.HEIGHT;
+      if (terrY > f.anchorY + TOLERANCE) {
+        f.img.destroy();
+      } else {
+        kept.push(f);
+      }
+    }
+    this.flora = kept;
   }
 
   private floraForBiome(): FloraCfg[] {
@@ -416,7 +438,7 @@ export class TerrainView {
     this.mountainFar.destroy();
     this.mountainNear.destroy();
     this.tearDownAtmosphere();
-    this.flora.forEach((f) => f.destroy());
+    this.flora.forEach((f) => f.img.destroy());
   }
 }
 

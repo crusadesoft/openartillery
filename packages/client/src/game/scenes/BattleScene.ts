@@ -1326,6 +1326,11 @@ export class BattleScene extends Phaser.Scene {
       }
     } else if (evt.type === "gameOver") {
       Sound.play(evt.winnerId ? "turn" : "thud");
+    } else if (evt.type === "item") {
+      if (evt.item === "jetpack" && evt.from) {
+        const t = this.tanks.get(evt.tankId);
+        if (t) t.playJetpack(evt.from, { x: evt.x, y: evt.y });
+      }
     }
   }
 
