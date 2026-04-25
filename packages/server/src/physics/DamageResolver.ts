@@ -54,26 +54,34 @@ export function applyBlastDamage(
   });
 }
 
-/** Napalm DoT: each fire tile applies damage-per-second to any tank
- *  whose AABB overlaps it. Fire tiles track terrain height changes so
- *  they hug the deformed surface. */
+/** Napalm DoT: each fire tile applies a discrete damage hit to any tank
+ *  it overlaps on a fixed cadence (every ~500ms). Each tile is allowed
+ *  exactly 3 hits before it burns out — keeps napalm from grinding a
+ *  pinned tank to dust over multiple turns. Fire tiles also track terrain
+ *  height changes so they hug the deformed surface. */
 export function tickFires(
   state: BattleState,
   heightAt: (x: number) => number,
-  dt: number,
   damages: DamageRecord[],
   deaths: string[],
+  fireMeta: Map<string, { nextTickAt: number; hitsRemaining: number }>,
 ): void {
+  const now = Date.now();
+  const burnedOut: string[] = [];
   state.fires.forEach((tile) => {
     tile.y = heightAt(tile.x) - 10;
+    const meta = fireMeta.get(tile.id);
+    if (!meta) return;
+    if (now < meta.nextTickAt) return;
+    meta.nextTickAt = now + 500;
+    meta.hitsRemaining -= 1;
     state.players.forEach((p) => {
       if (p.dead) return;
       const dx = p.x - tile.x;
       const dy = p.y - tile.y;
       if (Math.hypot(dx, dy) >= tile.radius + TANK.WIDTH / 2) return;
       const def = WEAPONS.napalm;
-      const dps = def.napalm?.damagePerSec ?? 10;
-      const dmg = Math.max(1, Math.round(dps * dt));
+      const dmg = Math.max(1, Math.round(def.napalm?.damagePerSec ?? 10));
       const applied = Math.min(p.hp, dmg);
       p.hp = Math.max(0, p.hp - dmg);
       const owner = state.players.get(tile.ownerId);
@@ -95,13 +103,25 @@ export function tickFires(
         killed,
       });
     });
+    if (meta.hitsRemaining <= 0) burnedOut.push(tile.id);
   });
+  for (const id of burnedOut) {
+    state.fires.delete(id);
+    fireMeta.delete(id);
+  }
 }
 
-export function pruneFires(state: BattleState, now: number): void {
+export function pruneFires(
+  state: BattleState,
+  now: number,
+  fireMeta: Map<string, { nextTickAt: number; hitsRemaining: number }>,
+): void {
   const expired: string[] = [];
   state.fires.forEach((f, key) => {
     if (f.expiresAt <= now) expired.push(key);
   });
-  for (const k of expired) state.fires.delete(k);
+  for (const k of expired) {
+    state.fires.delete(k);
+    fireMeta.delete(k);
+  }
 }

@@ -70,6 +70,10 @@ export class BattleRoom extends Room<BattleState> {
   private rematchVotes = new Set<string>();
   /** true once the current turn's tank has fired — blocks spam. */
   private turnFired = false;
+  /** Tracks the most recent shot until projectiles resolve, so we can
+   *  fire a miss taunt if nobody got hit. `bot` distinguishes self-roast
+   *  (bot whiffs) from peanut-gallery (human whiffs and a bot mocks). */
+  private pendingShot: { id: string; bot: boolean; hit: boolean } | null = null;
   private initialOptions: RoomOptions = { mode: "ffa", username: "Player" };
   /** Optional join gate for private rooms. Stored only on the instance —
    *  never written to state — so it doesn't leak through schema patches. */
@@ -562,6 +566,7 @@ export class BattleRoom extends Room<BattleState> {
     if (p.bot && Math.random() < 0.22) {
       this.botSay(p, pick(BOT_LINES.on_fire));
     }
+    this.pendingShot = { id: p.id, bot: p.bot, hit: false };
     this.logEvent({
       kind: "fire",
       id: p.id,
@@ -741,6 +746,11 @@ export class BattleRoom extends Room<BattleState> {
     this.refreshMetadata();
     this.logEvent({ kind: "start", players: ids, mode: this.mode });
     matchesStarted.inc({ mode: this.mode });
+    const startBots = Array.from(this.state.players.values()).filter((p) => p.bot);
+    if (startBots.length > 0 && Math.random() < 0.8) {
+      const speaker = startBots[Math.floor(Math.random() * startBots.length)]!;
+      this.botSay(speaker, pick(BOT_LINES.on_match_start));
+    }
     this.advanceTurn();
   }
 
@@ -836,6 +846,15 @@ export class BattleRoom extends Room<BattleState> {
         x: d.x,
         y: d.y,
       });
+      // Track whether the pending shot connected with anyone other than
+      // the shooter — used for miss taunts at turn-end.
+      if (
+        this.pendingShot &&
+        d.ownerId === this.pendingShot.id &&
+        d.tankId !== d.ownerId
+      ) {
+        this.pendingShot.hit = true;
+      }
       if (d.killed) {
         const killer = this.state.players.get(d.ownerId);
         const victim = this.state.players.get(d.tankId);
@@ -856,12 +875,49 @@ export class BattleRoom extends Room<BattleState> {
         if (victim?.bot && Math.random() < 0.55) {
           this.botSay(victim, pick(BOT_LINES.on_death, [killer?.name ?? "???"]));
         }
+        // Peanut-gallery line from a random uninvolved bot.
+        if (Math.random() < 0.2) {
+          const witnesses = Array.from(this.state.players.values()).filter(
+            (q) =>
+              q.bot &&
+              !q.dead &&
+              q.id !== killer?.id &&
+              q.id !== victim?.id,
+          );
+          const witness = witnesses[Math.floor(Math.random() * witnesses.length)];
+          if (witness) {
+            this.botSay(
+              witness,
+              pick(BOT_LINES.on_witness_kill, [killer?.name ?? "someone"]),
+            );
+          }
+        }
       } else {
         // Hit but didn't kill — occasional bot reaction (being hit
         // is more common than dying, throttle harder).
         const victim = this.state.players.get(d.tankId);
-        if (victim?.bot && Math.random() < 0.18) {
-          this.botSay(victim, pick(BOT_LINES.on_hit));
+        if (victim?.bot) {
+          if (d.ownerId === d.tankId && Math.random() < 0.85) {
+            this.botSay(victim, pick(BOT_LINES.on_self_damage));
+          } else {
+            const prevHp = victim.hp + d.amount;
+            const lowThresh = Math.max(1, Math.floor(TANK.MAX_HP * 0.25));
+            if (
+              victim.hp > 0 &&
+              victim.hp <= lowThresh &&
+              prevHp > lowThresh &&
+              Math.random() < 0.6
+            ) {
+              this.botSay(
+                victim,
+                pick(BOT_LINES.on_low_hp, [
+                  this.state.players.get(d.ownerId)?.name ?? "you",
+                ]),
+              );
+            } else if (Math.random() < 0.18) {
+              this.botSay(victim, pick(BOT_LINES.on_hit));
+            }
+          }
         }
       }
     }
@@ -876,6 +932,21 @@ export class BattleRoom extends Room<BattleState> {
     if (this.state.phase === "playing") {
       if (this.nextTurnAt === -1 && !this.world.hasLiveProjectiles()) {
         this.nextTurnAt = now + TURN.BETWEEN_TURNS_MS;
+        if (this.pendingShot && !this.pendingShot.hit) {
+          const shooter = this.state.players.get(this.pendingShot.id);
+          if (this.pendingShot.bot && shooter?.bot && Math.random() < 0.5) {
+            this.botSay(shooter, pick(BOT_LINES.on_miss));
+          } else if (!this.pendingShot.bot && shooter && Math.random() < 0.55) {
+            const heckler = this.pickRandomLivingBot(shooter.id);
+            if (heckler) {
+              this.botSay(
+                heckler,
+                pick(BOT_LINES.on_opponent_miss, [shooter.name]),
+              );
+            }
+          }
+        }
+        this.pendingShot = null;
       }
       if (this.nextTurnAt > 0 && now >= this.nextTurnAt) {
         this.advanceTurn();
@@ -920,6 +991,9 @@ export class BattleRoom extends Room<BattleState> {
       : null;
     this.state.winnerId = winner?.id ?? "";
     this.broadcastEvent({ type: "gameOver", winnerId: winner?.id ?? null });
+    if (winner?.bot) {
+      this.botSay(winner, pick(BOT_LINES.on_victory));
+    }
     matchesFinished.inc({
       mode: this.mode,
       outcome: winner ? "winner" : "stalemate",
@@ -1032,6 +1106,14 @@ export class BattleRoom extends Room<BattleState> {
       text,
       at: Date.now(),
     });
+  }
+
+  private pickRandomLivingBot(excludeId?: string): Player | null {
+    const candidates = Array.from(this.state.players.values()).filter(
+      (p) => p.bot && !p.dead && p.id !== excludeId,
+    );
+    if (candidates.length === 0) return null;
+    return candidates[Math.floor(Math.random() * candidates.length)] ?? null;
   }
 }
 

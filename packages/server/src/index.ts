@@ -15,7 +15,7 @@ import { httpTiming, metricsHandler } from "./metrics.js";
 import { authRouter } from "./auth/router.js";
 import { apiRouter } from "./api/router.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
-import { createColyseus } from "./colyseus.js";
+import { createColyseus, cleanupStaleRoomCaches } from "./colyseus.js";
 import { BattleRoom } from "./rooms/BattleRoom.js";
 import { startMatchmakingMonitor } from "./rooms/Matchmaking.js";
 import { db, pool } from "./db/index.js";
@@ -128,6 +128,12 @@ async function bootstrap(): Promise<void> {
   } catch (err) {
     logger.error({ err }, "pg pool warmup failed");
     throw err;
+  }
+
+  try {
+    await cleanupStaleRoomCaches();
+  } catch (err) {
+    logger.error({ err }, "stale room cache cleanup failed");
   }
 
   httpServer.listen(config.PORT, () => {

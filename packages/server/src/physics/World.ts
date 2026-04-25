@@ -53,6 +53,11 @@ export class World {
   readonly projectiles = new Map<string, ProjectileBody>();
   private nextProjectileId = 1;
   private nextFireId = 1;
+  /** Server-only side state for fire tiles: when each tile's next damage
+   *  tick fires and how many hits it has left. Capping per-tile hits is
+   *  what keeps napalm from melting a stationary tank — the schema-level
+   *  `expiresAt` is only a duration backstop. */
+  readonly fireMeta = new Map<string, { nextTickAt: number; hitsRemaining: number }>();
 
   constructor(public state: BattleState, seed: number, biome: BiomeId) {
     this.terrain = new Terrain(state.terrain, seed, biome);
@@ -203,14 +208,20 @@ export class World {
   }
 
   step(dt: number): StepTelemetry {
-    pruneFires(this.state, Date.now());
+    pruneFires(this.state, Date.now(), this.fireMeta);
     const explosions: ExplosionEvent[] = [];
     const damages: DamageRecord[] = [];
     const deaths: string[] = [];
 
     // Apply napalm damage over time.
     if (this.state.fires.size > 0) {
-      tickFires(this.state, (x) => this.terrain.heightAt(x), dt, damages, deaths);
+      tickFires(
+        this.state,
+        (x) => this.terrain.heightAt(x),
+        damages,
+        deaths,
+        this.fireMeta,
+      );
     }
 
     if (this.projectiles.size > 0) {
@@ -353,6 +364,10 @@ export class World {
         tile.radius = n.radius * 0.35;
         tile.expiresAt = Date.now() + n.durationSec * 1000;
         this.state.fires.set(id, tile);
+        this.fireMeta.set(id, {
+          nextTickAt: Date.now() + 500,
+          hitsRemaining: 3,
+        });
       }
     }
   }
@@ -363,7 +378,9 @@ export class World {
   }
 
   hasLiveProjectiles(): boolean {
-    return this.projectiles.size > 0;
+    // Active fire tiles count as in-flight combat — the turn shouldn't
+    // advance while napalm is still ticking damage on the firing player.
+    return this.projectiles.size > 0 || this.state.fires.size > 0;
   }
 
   /** Force-clear any projectiles still in flight. Used as a safety net
@@ -373,5 +390,7 @@ export class World {
     for (const id of Array.from(this.projectiles.keys())) {
       this.removeProjectile(id);
     }
+    this.state.fires.clear();
+    this.fireMeta.clear();
   }
 }
