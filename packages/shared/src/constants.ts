@@ -72,7 +72,10 @@ export const ROOM = {
 
 export const NETWORK = {
   TICK_HZ: 30,
-  PATCH_HZ: 20,
+  // Match TICK_HZ so every server tick produces a patch. At 30 Hz the
+  // client's snapshot buffer fills with evenly-spaced samples (~33 ms),
+  // which makes pure playback interpolation visibly smooth.
+  PATCH_HZ: 30,
   DEFAULT_PORT: 2567,
 } as const;
 

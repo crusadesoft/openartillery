@@ -19,6 +19,7 @@ import { createColyseus, cleanupStaleRoomCaches } from "./colyseus.js";
 import { BattleRoom } from "./rooms/BattleRoom.js";
 import { startMatchmakingMonitor } from "./rooms/Matchmaking.js";
 import { db, pool } from "./db/index.js";
+import { initRapier } from "./physics/rapierWorld.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -121,6 +122,12 @@ gameServer.define("battle", BattleRoom).filterBy(["mode", "inviteCode"]);
 startMatchmakingMonitor();
 
 async function bootstrap(): Promise<void> {
+  // Boot the Rapier WASM module before any room can construct its
+  // physics integrator. ~30ms cold start; running it ahead of listen
+  // keeps the first match's `onCreate` fast.
+  await initRapier();
+  logger.info("rapier physics initialised");
+
   // Run pending migrations before accepting traffic. Idempotent — Drizzle
   // tracks applied migrations in a metadata table, so a fresh boot after
   // a migration-less restart is a no-op. Makes "forgot to migrate" a

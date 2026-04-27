@@ -1,6 +1,5 @@
 import Phaser from "phaser";
 import type { Projectile, WeaponId } from "@artillery/shared";
-import { WORLD } from "@artillery/shared";
 
 /** Texture key + display footprint per weapon. Sized so the round reads
  *  clearly in-flight (~20-36px wide) without being comically huge. */
@@ -16,23 +15,44 @@ const PROJ_ART: Record<WeaponId, { tex: string; w: number; h: number }> = {
   mirv:      { tex: "proj_mirv",      w: 34, h: 18 },
 };
 
+/** How far behind the latest server snapshot we render, in milliseconds.
+ *  At PATCH_HZ=30 (33 ms intervals), 75 ms keeps ~2 snapshots ahead of
+ *  the render cursor at all times — robust to a missed patch and still
+ *  imperceptible for ballistic flight. */
+const RENDER_DELAY_MS = 75;
+
+/** Max snapshots retained per projectile. Keeps memory bounded; ~10
+ *  covers ~330 ms of history, well past the render-delay window. */
+const BUFFER_LIMIT = 10;
+
+interface Snapshot {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  /** state.serverTime at the moment this snapshot's values applied. */
+  serverTime: number;
+}
+
 /**
- * Smoothed projectile view. The server broadcasts state at ~20 Hz — at
- * 60 fps rendering the sprite visibly "teleports" every 50 ms if we just
- * snap to server positions. Instead we extrapolate with the last known
- * velocity between snapshots and snap softly when a fresh one arrives.
+ * Pure-playback projectile view. Holds a small buffer of authoritative
+ * server snapshots tagged with `state.serverTime`, then renders at
+ * `serverTimeNow − RENDER_DELAY_MS` by lerping between the two
+ * snapshots that bracket that moment. Has no physics knowledge — it
+ * doesn't care whether the server uses Rapier, hand-rolled Euler, or
+ * something we haven't invented yet. The same module would render
+ * tank or fire-tile playback unchanged if we wanted to extend it.
  */
 export class ProjectileView {
   readonly sprite: Phaser.GameObjects.Image;
   private trail: Phaser.GameObjects.Particles.ParticleEmitter | null = null;
 
-  // Locally simulated position / velocity, corrected by server snaps.
-  private lx = 0;
-  private ly = 0;
-  private lvx = 0;
-  private lvy = 0;
-  /** Last server-authoritative sample we blended toward. */
-  private lastSync = { x: 0, y: 0, vx: 0, vy: 0 };
+  /** FIFO buffer, oldest first. */
+  private buf: Snapshot[] = [];
+  /** Wall clock at the moment we last received a snapshot — paired with
+   *  the latest snapshot's serverTime to advance the playback cursor at
+   *  real rate between patches. */
+  private lastSyncWall = 0;
 
   constructor(scene: Phaser.Scene, public state: Projectile) {
     const art = PROJ_ART[state.weapon as WeaponId] ?? PROJ_ART.shell;
@@ -45,11 +65,6 @@ export class ProjectileView {
       // the shell's centre of mass is still near its physics position.
       .setOrigin(0.25, 0.5)
       .setDepth(6);
-    this.lx = state.x;
-    this.ly = state.y;
-    this.lvx = state.vx;
-    this.lvy = state.vy;
-    this.lastSync = { x: state.x, y: state.y, vx: state.vx, vy: state.vy };
     this.trail = scene.add
       .particles(state.x, state.y, "spark", {
         lifespan: 320,
@@ -62,41 +77,64 @@ export class ProjectileView {
       .setDepth(5);
   }
 
-  /** Called every frame, but only reconciles when the server's snapshot
-   *  actually changed since last blend. */
-  maybeSync(p: Projectile): void {
+  /** Append a fresh server snapshot. Called every render frame, but
+   *  only writes to the buffer when one of the watched fields actually
+   *  changed (i.e. a patch landed). `serverTime` is the room-level
+   *  timeline; pass `state.serverTime` from the BattleState. */
+  maybeSync(p: Projectile, serverTime: number): void {
     this.state = p;
+    const last = this.buf[this.buf.length - 1];
     if (
-      p.x === this.lastSync.x && p.y === this.lastSync.y &&
-      p.vx === this.lastSync.vx && p.vy === this.lastSync.vy
+      last &&
+      p.x === last.x && p.y === last.y &&
+      p.vx === last.vx && p.vy === last.vy
     ) return;
-    const dx = p.x - this.lx;
-    const dy = p.y - this.ly;
-    const err = Math.hypot(dx, dy);
-    if (err > 60) {
-      this.lx = p.x;
-      this.ly = p.y;
-    } else {
-      this.lx += dx * 0.5;
-      this.ly += dy * 0.5;
-    }
-    this.lvx = p.vx;
-    this.lvy = p.vy;
-    this.lastSync.x = p.x;
-    this.lastSync.y = p.y;
-    this.lastSync.vx = p.vx;
-    this.lastSync.vy = p.vy;
+    this.buf.push({ x: p.x, y: p.y, vx: p.vx, vy: p.vy, serverTime });
+    if (this.buf.length > BUFFER_LIMIT) this.buf.shift();
+    this.lastSyncWall = performance.now();
   }
 
-  /** Integrate forward by `dt` seconds (called each Phaser frame). */
-  step(dt: number, wind: number): void {
-    this.lvx += wind * dt;
-    this.lvy += WORLD.GRAVITY * dt;
-    this.lx += this.lvx * dt;
-    this.ly += this.lvy * dt;
-    this.sprite.setPosition(this.lx, this.ly);
-    this.sprite.setRotation(Math.atan2(this.lvy, this.lvx));
-    if (this.trail) this.trail.setPosition(this.lx, this.ly);
+  step(_dt: number, _wind: number): void {
+    if (this.buf.length === 0) return;
+    const last = this.buf[this.buf.length - 1]!;
+
+    // Estimate "now" on the server clock by extrapolating real time
+    // forward from the last patch's serverTime. Tick-rate variance gets
+    // absorbed automatically — irregular wall arrival just means the
+    // render cursor sometimes leads or lags actual server time by a
+    // few ms, but the snapshot buffer is timeline-correct either way.
+    const estServerTime = last.serverTime + (performance.now() - this.lastSyncWall);
+    const renderTime = estServerTime - RENDER_DELAY_MS;
+
+    // Find the bracketing pair: largest snapshot ≤ renderTime and the
+    // next one after it. Walk from newest backward — the cursor sits
+    // near the tail in steady state so this terminates in O(1).
+    let from: Snapshot = this.buf[0]!;
+    let to: Snapshot = this.buf[0]!;
+    for (let i = this.buf.length - 1; i >= 0; i--) {
+      if (this.buf[i]!.serverTime <= renderTime) {
+        from = this.buf[i]!;
+        to = this.buf[i + 1] ?? from;
+        break;
+      }
+    }
+    if (renderTime > last.serverTime) {
+      // Render cursor has run past every snapshot in the buffer (a
+      // missed patch). Hold on the latest — better to freeze for one
+      // frame than to extrapolate physics we don't model here.
+      from = to = last;
+    }
+
+    const span = to.serverTime - from.serverTime;
+    const u = span > 0 ? Math.max(0, Math.min(1, (renderTime - from.serverTime) / span)) : 0;
+    const x = from.x + (to.x - from.x) * u;
+    const y = from.y + (to.y - from.y) * u;
+    const vx = from.vx + (to.vx - from.vx) * u;
+    const vy = from.vy + (to.vy - from.vy) * u;
+
+    this.sprite.setPosition(x, y);
+    this.sprite.setRotation(Math.atan2(vy, vx));
+    if (this.trail) this.trail.setPosition(x, y);
   }
 
   destroy(): void {

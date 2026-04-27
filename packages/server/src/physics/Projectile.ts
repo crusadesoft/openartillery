@@ -1,5 +1,6 @@
 import { Projectile, WEAPONS, WORLD, WeaponId } from "@artillery/shared";
 import { Terrain } from "./Terrain.js";
+import type { ProjectileHandle, RapierIntegrator } from "./rapierWorld.js";
 
 export interface ProjectileBody {
   state: Projectile;
@@ -12,9 +13,12 @@ export interface ProjectileBody {
   split: boolean;
   /** seconds spent below restDetonate.speedThreshold (grenade fuse) */
   restTime: number;
+  /** Rapier handles — owned by the integrator, freed on remove. */
+  handle: ProjectileHandle;
 }
 
 export function createProjectile(
+  integrator: RapierIntegrator,
   id: string,
   ownerId: string,
   weapon: WeaponId,
@@ -34,6 +38,7 @@ export function createProjectile(
   state.vy = vy;
   state.tint = def.tint;
   state.radius = def.projectileRadius;
+  const handle = integrator.createProjectile(weapon, x, y, vx, vy, def.projectileRadius);
   return {
     state,
     weapon,
@@ -42,6 +47,7 @@ export function createProjectile(
     age: 0,
     split: false,
     restTime: 0,
+    handle,
   };
 }
 
@@ -52,9 +58,14 @@ export interface StepResult {
   splits: ProjectileBody[];
 }
 
+/** One physics tick. The Rapier world handles integration, contacts,
+ *  and bouncing; this function stitches the higher-level rules around
+ *  it: TTL, MIRV split, bounce counting, grenade rest-fuse, offscreen,
+ *  and reading positions back into our schema state. */
 export function stepProjectiles(
   bodies: Iterable<ProjectileBody>,
   terrain: Terrain,
+  integrator: RapierIntegrator,
   wind: number,
   dt: number,
 ): StepResult {
@@ -62,6 +73,10 @@ export function stepProjectiles(
   const offscreen: ProjectileBody[] = [];
   const splits: ProjectileBody[] = [];
 
+  // Pre-step: apply wind, advance age/ttl, handle MIRV split. Bodies
+  // marked for split/ttl-impact are not stepped this frame.
+  const live: ProjectileBody[] = [];
+  const handleToBody = new Map<number, ProjectileBody>();
   for (const b of bodies) {
     b.ttl -= dt;
     b.age += dt;
@@ -69,80 +84,59 @@ export function stepProjectiles(
       impacts.push({ body: b, x: b.state.x, y: b.state.y });
       continue;
     }
-
-    // MIRV: signal split, let the world spawn the children; skip stepping.
     const def = WEAPONS[b.weapon];
     if (def.mirv && !b.split && b.age >= def.mirv.splitAfterSec) {
       b.split = true;
       splits.push(b);
       continue;
     }
+    integrator.applyWind(b.handle, wind, dt);
+    live.push(b);
+    handleToBody.set(b.handle.bodyHandle, b);
+  }
 
-    const speed = Math.hypot(b.state.vx, b.state.vy);
-    const substeps = Math.max(1, Math.ceil((speed * dt) / 8));
-    const sdt = dt / substeps;
+  const { contacts } = integrator.step(dt);
+
+  for (const b of live) {
+    const def = WEAPONS[b.weapon];
+    const k = integrator.readState(b.handle);
+    if (!k) continue;
+    b.state.x = k.x;
+    b.state.y = k.y;
+    b.state.vx = k.vx;
+    b.state.vy = k.vy;
+
+    if (k.x < -200 || k.x > WORLD.WIDTH + 200 || k.y > WORLD.HEIGHT + 400) {
+      offscreen.push(b);
+      continue;
+    }
+
+    const hit = contacts.has(b.handle.bodyHandle);
+    if (hit) {
+      if (b.bouncesLeft > 0) {
+        b.bouncesLeft--;
+        // Rapier's restitution already produced the bounce; nothing else
+        // to do until the next contact.
+      } else if (!def.restDetonate) {
+        impacts.push({ body: b, x: k.x, y: k.y });
+        continue;
+      }
+      // restDetonate weapons (grenade) keep rolling until the rest-fuse
+      // below decides they're settled.
+    }
 
     if (def.restDetonate && b.bouncesLeft <= 0) {
       const threshold = def.restDetonate.speedThreshold ?? 40;
-      const surface = terrain.heightAt(b.state.x);
-      const onGround = b.state.y >= surface - 8;
-      if (speed < threshold && onGround) {
+      const surface = terrain.heightAt(k.x);
+      const onGround = k.y >= surface - 8;
+      if (k.speed < threshold && onGround) {
         b.restTime += dt;
         if (b.restTime >= def.restDetonate.afterSec) {
-          impacts.push({ body: b, x: b.state.x, y: b.state.y });
+          impacts.push({ body: b, x: k.x, y: k.y });
           continue;
         }
       } else {
         b.restTime = 0;
-      }
-    }
-
-    let exploded = false;
-    for (let i = 0; i < substeps && !exploded; i++) {
-      b.state.vx += wind * sdt;
-      b.state.vy += WORLD.GRAVITY * sdt;
-      b.state.vx -= b.state.vx * WORLD.AIR_DRAG * speed * sdt;
-
-      const nx = b.state.x + b.state.vx * sdt;
-      const ny = b.state.y + b.state.vy * sdt;
-
-      if (nx < -200 || nx > WORLD.WIDTH + 200 || ny > WORLD.HEIGHT + 400) {
-        offscreen.push(b);
-        exploded = true;
-        break;
-      }
-
-      if (terrain.isSolid(nx, ny)) {
-        if (b.bouncesLeft > 0) {
-          b.bouncesLeft--;
-          const slope = terrain.heightAt(nx + 4) - terrain.heightAt(nx - 4);
-          const nlen = Math.hypot(slope, 8);
-          const nxn = -slope / nlen;
-          const nyn = -8 / nlen;
-          const dot = b.state.vx * nxn + b.state.vy * nyn;
-          b.state.vx = (b.state.vx - 2 * dot * nxn) * 0.55;
-          b.state.vy = (b.state.vy - 2 * dot * nyn) * 0.55;
-          b.state.x = nx + nxn * 3;
-          b.state.y = ny + nyn * 3;
-        } else if (def.restDetonate) {
-          // Out of bounces but rest-fused: keep rolling with heavy damping
-          // so the rest-timer (above) eventually triggers detonation.
-          const slope = terrain.heightAt(nx + 4) - terrain.heightAt(nx - 4);
-          const nlen = Math.hypot(slope, 8);
-          const nxn = -slope / nlen;
-          const nyn = -8 / nlen;
-          const dot = b.state.vx * nxn + b.state.vy * nyn;
-          b.state.vx = (b.state.vx - 2 * dot * nxn) * 0.25;
-          b.state.vy = (b.state.vy - 2 * dot * nyn) * 0.25;
-          b.state.x = nx + nxn * 3;
-          b.state.y = ny + nyn * 3;
-        } else {
-          impacts.push({ body: b, x: nx, y: ny });
-          exploded = true;
-        }
-      } else {
-        b.state.x = nx;
-        b.state.y = ny;
       }
     }
   }

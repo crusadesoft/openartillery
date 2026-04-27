@@ -202,6 +202,7 @@ export class BattleRoom extends Room<BattleState> {
   override onDispose(): void {
     if (this.simInterval) clearInterval(this.simInterval);
     if (this.postMatchTimer) clearTimeout(this.postMatchTimer);
+    this.world.dispose();
   }
 
   override async onAuth(_client: Client, options: RoomOptions): Promise<boolean> {
@@ -510,6 +511,7 @@ export class BattleRoom extends Room<BattleState> {
     const newSeed = Math.floor(Math.random() * 2 ** 31);
     this.state.projectiles.clear();
     this.state.fires.clear();
+    this.world.dispose();
     this.world = new World(this.state, newSeed, biome);
     this.state.players.forEach((p) => {
       const spawnX = this.pickSpawnX(p);
@@ -1585,6 +1587,7 @@ export class BattleRoom extends Room<BattleState> {
     const newBiome = randomBiome();
     this.state.biome = newBiome;
     const newSeed = Math.floor(Math.random() * 2 ** 31);
+    this.world.dispose();
     this.world = new World(this.state, newSeed, newBiome);
     this.state.wind = rollWind();
     // Reset players.

@@ -1,4 +1,5 @@
 import { BIOMES, BiomeId, TerrainState, WORLD } from "@artillery/shared";
+import type { RapierIntegrator } from "./rapierWorld.js";
 
 /**
  * Deterministic Mulberry32 PRNG — keeps terrain generation reproducible
@@ -50,6 +51,10 @@ export function generateHeights(
 export class Terrain {
   readonly width: number;
   readonly heights: number[];
+  /** Optional Rapier integrator. When set, every height mutation rebuilds
+   *  the polyline collider so projectiles see the new surface. Tests that
+   *  exercise terrain math in isolation can leave it unset. */
+  private integrator: RapierIntegrator | null = null;
 
   constructor(
     public state: TerrainState,
@@ -62,6 +67,11 @@ export class Terrain {
     state.seed = seed;
     state.heights.length = 0;
     for (const h of this.heights) state.heights.push(h);
+  }
+
+  attachIntegrator(integrator: RapierIntegrator): void {
+    this.integrator = integrator;
+    integrator.rebuildTerrain(this.heights);
   }
 
   heightAt(x: number): number {
@@ -110,6 +120,7 @@ export class Terrain {
       Math.min(this.width - 2, Math.ceil(ex + radius + 6)),
       2,
     );
+    this.integrator?.rebuildTerrain(this.heights);
   }
 
   mound(ex: number, ey: number, radius: number): void {
@@ -138,6 +149,7 @@ export class Terrain {
       Math.min(this.width - 2, Math.ceil(ex + radius + 6)),
       2,
     );
+    this.integrator?.rebuildTerrain(this.heights);
   }
 
   private setHeight(x: number, y: number): void {

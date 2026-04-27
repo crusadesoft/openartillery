@@ -196,10 +196,11 @@ export class BattleScene extends Phaser.Scene {
       );
       view.sync(p, p.id === this.room.state.currentTurnId, slopeDeg);
     });
+    const serverTime = this.room.state.serverTime;
     this.room.state.projectiles.forEach((pr) => {
       const view = this.projectiles.get(pr.id);
       if (!view) return;
-      view.maybeSync(pr);
+      view.maybeSync(pr, serverTime);
       view.step(dt, this.room.state.wind);
     });
     this.updateWindParticles();
@@ -1161,7 +1162,11 @@ export class BattleScene extends Phaser.Scene {
   }
   private addProjectile(pr: Projectile, key: string): void {
     if (this.projectiles.has(key)) return;
-    this.projectiles.set(key, new ProjectileView(this, pr));
+    const view = new ProjectileView(this, pr);
+    // Seed the playback buffer with the spawn snapshot so the sprite
+    // doesn't sit pinned at the muzzle until the next patch lands.
+    view.maybeSync(pr, this.room.state.serverTime);
+    this.projectiles.set(key, view);
     // Start recording our own arc the first time one of our projectiles
     // enters the world after a fire. Child projectiles (cluster bomblets,
     // MIRV warheads, airstrike fall-ins) spawn *after* the parent is

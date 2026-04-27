@@ -14,6 +14,7 @@ import {
   createProjectile,
   stepProjectiles,
 } from "./Projectile.js";
+import { RapierIntegrator } from "./rapierWorld.js";
 import { applyBlastDamage, pruneFires, tickFires } from "./DamageResolver.js";
 
 export interface Input {
@@ -50,6 +51,7 @@ export interface StepTelemetry {
 
 export class World {
   readonly terrain: Terrain;
+  readonly integrator: RapierIntegrator;
   readonly projectiles = new Map<string, ProjectileBody>();
   private nextProjectileId = 1;
   private nextFireId = 1;
@@ -61,6 +63,12 @@ export class World {
 
   constructor(public state: BattleState, seed: number, biome: BiomeId) {
     this.terrain = new Terrain(state.terrain, seed, biome);
+    this.integrator = new RapierIntegrator();
+    this.terrain.attachIntegrator(this.integrator);
+  }
+
+  dispose(): void {
+    this.integrator.dispose();
   }
 
   spawnTankAt(player: Player, x: number): void {
@@ -201,13 +209,17 @@ export class World {
     vy: number,
   ): ProjectileBody {
     const id = `proj_${this.nextProjectileId++}`;
-    const body = createProjectile(id, ownerId, weapon, x, y, vx, vy);
+    const body = createProjectile(this.integrator, id, ownerId, weapon, x, y, vx, vy);
     this.projectiles.set(id, body);
     this.state.projectiles.set(id, body.state);
     return body;
   }
 
   step(dt: number): StepTelemetry {
+    // Stamp the tick so clients can interpolate projectile playback
+    // against a server-authoritative timeline instead of guessing from
+    // wall-clock arrival times.
+    this.state.serverTime = Date.now();
     pruneFires(this.state, Date.now(), this.fireMeta);
     const explosions: ExplosionEvent[] = [];
     const damages: DamageRecord[] = [];
@@ -228,6 +240,7 @@ export class World {
       const result = stepProjectiles(
         this.projectiles.values(),
         this.terrain,
+        this.integrator,
         this.state.wind,
         dt,
       );
@@ -376,6 +389,8 @@ export class World {
   }
 
   private removeProjectile(id: string): void {
+    const body = this.projectiles.get(id);
+    if (body) this.integrator.removeProjectile(body.handle);
     this.projectiles.delete(id);
     this.state.projectiles.delete(id);
   }

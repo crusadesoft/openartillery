@@ -113,4 +113,8 @@ export class BattleState extends Schema {
   @type("number") fuelPerTurn = 100;
   @type("number") startingHp = 300;
   @type("number") windMax = 25;
+  /** Monotonic server clock in milliseconds — stamped each tick.
+   *  Clients use it as the timeline for snapshot interpolation so they
+   *  don't depend on local arrival timing or per-projectile timestamps. */
+  @type("number") serverTime = 0;
 }

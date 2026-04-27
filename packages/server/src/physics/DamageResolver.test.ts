@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { BattleState, Player, type WeaponId } from "@artillery/shared";
+import { BattleState, Player, Projectile, type WeaponId } from "@artillery/shared";
 import { applyBlastDamage } from "./DamageResolver.js";
-import { createProjectile, type ProjectileBody } from "./Projectile.js";
+import type { ProjectileBody } from "./Projectile.js";
 import type { StepTelemetry } from "./World.js";
 
 function makeState(opts: {
@@ -25,7 +25,22 @@ function makeState(opts: {
 }
 
 function makeBody(ownerId: string, weapon: WeaponId = "shell"): ProjectileBody {
-  return createProjectile("proj1", ownerId, weapon, 0, 0, 0, 0);
+  // Damage tests don't exercise physics — fabricate a minimal body so we
+  // don't have to spin up a Rapier world per case.
+  const state = new Projectile();
+  state.id = "proj1";
+  state.ownerId = ownerId;
+  state.weapon = weapon;
+  return {
+    state,
+    weapon,
+    bouncesLeft: 0,
+    ttl: 14,
+    age: 0,
+    split: false,
+    restTime: 0,
+    handle: { bodyHandle: -1, colliderHandle: -1 },
+  };
 }
 
 function emptyTelemetry(): StepTelemetry {
