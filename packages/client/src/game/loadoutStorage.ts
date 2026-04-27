@@ -1,21 +1,28 @@
 import {
-  type Loadout,
-  DEFAULT_LOADOUT_SPEC,
-  sanitizeLoadout,
+  DEFAULT_SELECTION,
+  sanitizeSelection,
+  type LoadoutSelection,
 } from "@artillery/shared";
 
-const KEY = "artillery:loadout";
+const KEY = "artillery:selection";
+// Old key from the part-customisation era. Read once on first load so
+// returning players don't lose nothing-of-substance, then ignored.
+const LEGACY_KEY = "artillery:loadout";
 
-export function loadLoadout(): Loadout {
+export function loadSelection(): LoadoutSelection {
   try {
     const raw = localStorage.getItem(KEY);
-    if (!raw) return { ...DEFAULT_LOADOUT_SPEC };
-    return sanitizeLoadout(JSON.parse(raw));
+    if (raw) return sanitizeSelection(JSON.parse(raw));
+    // No-op fallback if the legacy key is around — discard.
+    if (localStorage.getItem(LEGACY_KEY)) {
+      localStorage.removeItem(LEGACY_KEY);
+    }
+    return { ...DEFAULT_SELECTION };
   } catch {
-    return { ...DEFAULT_LOADOUT_SPEC };
+    return { ...DEFAULT_SELECTION };
   }
 }
 
-export function saveLoadout(l: Loadout): void {
-  localStorage.setItem(KEY, JSON.stringify(sanitizeLoadout(l)));
+export function saveSelection(sel: LoadoutSelection): void {
+  localStorage.setItem(KEY, JSON.stringify(sanitizeSelection(sel)));
 }

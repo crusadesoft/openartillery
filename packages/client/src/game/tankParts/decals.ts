@@ -6,7 +6,7 @@ export function drawDecal(
   dcx: number,
   dcy: number,
   W: number,
-  primary: string,
+  _primary: string,
 ): void {
   if (decal === "none") return;
   const dSize = Math.max(8, W * 0.08);
@@ -29,15 +29,6 @@ export function drawDecal(
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
-  } else if (decal === "number") {
-    // Derived from the primary colour so different tanks sport different numbers.
-    const h = (parseInt(primary.slice(1), 16) >>> 0) & 0xff;
-    const n = (h % 90) + 10;
-    ctx.font = `900 ${dSize * 1.1}px var(--font-display), "Oswald", Impact, sans-serif`;
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(String(n), dcx, dcy);
-    ctx.strokeText(String(n), dcx, dcy);
   } else if (decal === "skull") {
     const r = dSize / 2;
     ctx.beginPath();

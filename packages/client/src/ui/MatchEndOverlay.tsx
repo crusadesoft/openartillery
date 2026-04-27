@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import type { Room } from "colyseus.js";
 import type { BattleState, Player } from "@artillery/shared";
 import { teamLabel, teamTint } from "./lobby/teamMeta";
+import { useShop } from "../shop/ShopProvider";
 
 interface Props {
   room: Room<BattleState>;
@@ -63,6 +64,7 @@ export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Eleme
               />
             ))}
             <p className="report-foot">{tail}</p>
+            <QuartermasterCard />
           </div>
         </div>
       </div>
@@ -112,9 +114,30 @@ export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Eleme
             </tbody>
           </table>
           <p className="report-foot">{tail}</p>
+          <QuartermasterCard />
         </div>
       </div>
     </div>
+  );
+}
+
+function QuartermasterCard(): JSX.Element | null {
+  const { tanks } = useShop();
+  const featured = useMemo(() => {
+    const unowned = tanks.filter((t) => !t.owned && t.priceCents > 0);
+    if (unowned.length === 0) return null;
+    return unowned[Math.floor(Math.random() * unowned.length)];
+  }, [tanks]);
+  if (!featured) return null;
+  return (
+    <a className="quartermaster-card" href="#/customize?tab=shop">
+      <span className="quartermaster-tag">Quartermaster</span>
+      <span className="quartermaster-title">{featured.label}</span>
+      <span className="quartermaster-blurb">{featured.blurb}</span>
+      <span className="quartermaster-price">
+        ${(featured.priceCents / 100).toFixed(2)} · Browse tanks ›
+      </span>
+    </a>
   );
 }
 

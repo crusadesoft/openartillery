@@ -106,6 +106,63 @@ export const matchParticipants = pgTable(
   }),
 );
 
+export const userLoadouts = pgTable(
+  "user_loadouts",
+  {
+    userId: uuid("user_id")
+      .primaryKey()
+      .references(() => users.id, { onDelete: "cascade" }),
+    tankSku: text("tank_sku").notNull(),
+    decal: text("decal").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+export const entitlements = pgTable(
+  "entitlements",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    sku: text("sku").notNull(),
+    source: text("source").notNull(),
+    externalId: text("external_id"),
+    grantedAt: timestamp("granted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    userIdx: index("entitlements_user_idx").on(t.userId),
+    uniqueUserSku: unique("entitlements_user_sku_key").on(t.userId, t.sku),
+  }),
+);
+
+export const purchaseEvents = pgTable(
+  "purchase_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    provider: text("provider").notNull(),
+    externalId: text("external_id").notNull(),
+    userId: uuid("user_id").references(() => users.id, { onDelete: "set null" }),
+    sku: text("sku").notNull(),
+    amountCents: integer("amount_cents").notNull(),
+    currency: text("currency").notNull(),
+    rawPayload: jsonb("raw_payload").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => ({
+    uniqueProviderEvent: unique("purchase_events_provider_external_key").on(
+      t.provider,
+      t.externalId,
+    ),
+  }),
+);
+
 // Convenience view constant for SQL you may add later.
 export const NOW = sql`now()`;
 
@@ -115,3 +172,9 @@ export type Match = typeof matches.$inferSelect;
 export type NewMatch = typeof matches.$inferInsert;
 export type MatchParticipant = typeof matchParticipants.$inferSelect;
 export type NewMatchParticipant = typeof matchParticipants.$inferInsert;
+export type UserLoadout = typeof userLoadouts.$inferSelect;
+export type NewUserLoadout = typeof userLoadouts.$inferInsert;
+export type Entitlement = typeof entitlements.$inferSelect;
+export type NewEntitlement = typeof entitlements.$inferInsert;
+export type PurchaseEvent = typeof purchaseEvents.$inferSelect;
+export type NewPurchaseEvent = typeof purchaseEvents.$inferInsert;

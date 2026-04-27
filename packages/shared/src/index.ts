@@ -8,5 +8,6 @@ export * from "./modes.js";
 export * from "./biomes.js";
 export * from "./elo.js";
 export * from "./loadout.js";
+export * from "./cosmetics.js";
 export * from "./dto.js";
 export * from "./protocol.js";

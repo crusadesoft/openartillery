@@ -1,7 +1,13 @@
-import { ROOM_OPTIONS_KEYS, WORLD, type RoomJoinOptions } from "@artillery/shared";
+import {
+  ROOM_OPTIONS_KEYS,
+  WORLD,
+  type LoadoutSelection,
+  type RoomJoinOptions,
+} from "@artillery/shared";
 import { eq } from "drizzle-orm";
 import { verifyAccessToken } from "../auth/jwt.js";
 import { db, schema } from "../db/index.js";
+import { getOwnedTankSkus, loadOwnedSelection } from "../shop/service.js";
 
 export const TANK_COLORS = [
   0xff5e5e, 0x5ecfff, 0x8aff5e, 0xffd25e, 0xcf5eff, 0xff9d5e,
@@ -181,7 +187,8 @@ export async function resolveIdentity(
   userId: string;
   username: string;
   mmr: number;
-  loadout?: RoomJoinOptions["loadout"];
+  selection?: LoadoutSelection;
+  ownedSkus: ReadonlySet<string>;
 } | null> {
   const token = options[ROOM_OPTIONS_KEYS.ACCESS_TOKEN as "accessToken"];
   if (!token) return null;
@@ -191,7 +198,17 @@ export async function resolveIdentity(
       where: eq(schema.users.id, claims.sub),
     });
     if (!row) return null;
-    return { userId: row.id, username: row.username, mmr: row.mmr };
+    const [{ selection }, ownedSkus] = await Promise.all([
+      loadOwnedSelection(row.id),
+      getOwnedTankSkus(row.id),
+    ]);
+    return {
+      userId: row.id,
+      username: row.username,
+      mmr: row.mmr,
+      selection,
+      ownedSkus,
+    };
   } catch {
     return null;
   }

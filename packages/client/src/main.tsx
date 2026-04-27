@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AuthProvider } from "./auth/AuthProvider";
+import { ShopProvider } from "./shop/ShopProvider";
 import { ErrorBoundary } from "./ui/ErrorBoundary";
 import "./styles/index.css";
 
@@ -11,7 +12,9 @@ createRoot(container).render(
   <React.StrictMode>
     <ErrorBoundary>
       <AuthProvider>
-        <App />
+        <ShopProvider>
+          <App />
+        </ShopProvider>
       </AuthProvider>
     </ErrorBoundary>
   </React.StrictMode>,

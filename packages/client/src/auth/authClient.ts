@@ -1,4 +1,4 @@
-import type { AuthTokens, PublicProfile } from "@artillery/shared";
+import type { AuthTokens, LoadoutSelection, PublicProfile } from "@artillery/shared";
 
 const ACCESS_KEY = "artillery:accessToken";
 const REFRESH_KEY = "artillery:refreshToken";
@@ -116,4 +116,43 @@ export const api = {
       `/api/rooms`,
     );
   },
+  getLoadout(accessToken: string) {
+    return request<{ selection: LoadoutSelection; ownedSkus: string[] }>(
+      `/api/me/loadout`,
+      { auth: accessToken },
+    );
+  },
+  saveLoadout(accessToken: string, selection: Partial<LoadoutSelection>) {
+    return request<{ selection: LoadoutSelection }>(`/api/me/loadout`, {
+      method: "PUT",
+      auth: accessToken,
+      body: JSON.stringify(selection),
+    });
+  },
+  getTanks(accessToken?: string) {
+    return request<{ tanks: TankListing[] }>(`/api/shop/tanks`, {
+      ...(accessToken ? { auth: accessToken } : {}),
+    });
+  },
+  checkout(accessToken: string, sku: string) {
+    return request<{ url: string }>(`/api/shop/checkout`, {
+      method: "POST",
+      auth: accessToken,
+      body: JSON.stringify({ sku }),
+    });
+  },
 };
+
+export interface TankListing {
+  sku: string;
+  label: string;
+  blurb: string;
+  priceCents: number;
+  body: string;
+  turret: string;
+  barrel: string;
+  pattern: string;
+  paint: { primary: number; accent: number; pattern: number };
+  bonusDecals: string[];
+  owned: boolean;
+}

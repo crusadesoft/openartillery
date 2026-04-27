@@ -14,6 +14,7 @@ import { logger, httpLogger, requestId } from "./logger.js";
 import { httpTiming, metricsHandler } from "./metrics.js";
 import { authRouter } from "./auth/router.js";
 import { apiRouter } from "./api/router.js";
+import { webhooksRouter } from "./api/webhooks.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
 import { createColyseus, cleanupStaleRoomCaches } from "./colyseus.js";
 import { BattleRoom } from "./rooms/BattleRoom.js";
@@ -67,6 +68,10 @@ app.use(
     credentials: true,
   }),
 );
+// Webhooks consume the raw request body for signature verification and
+// must be mounted BEFORE express.json() rewrites req.body.
+app.use("/webhooks", webhooksRouter);
+
 app.use(express.json({ limit: "64kb" }));
 
 app.get("/health", (_req, res) => {
@@ -102,7 +107,7 @@ app.use(
   }),
 );
 app.get("*", (req, res, next) => {
-  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/colyseus") || req.path.startsWith("/metrics") || req.path.startsWith("/health")) {
+  if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/webhooks") || req.path.startsWith("/colyseus") || req.path.startsWith("/metrics") || req.path.startsWith("/health")) {
     return next();
   }
   res.setHeader("Cache-Control", "no-cache");

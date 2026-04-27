@@ -1,40 +1,26 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ALL_BARRELS,
-  ALL_BODIES,
-  ALL_DECALS,
-  ALL_PATTERNS,
-  ALL_TURRETS,
-  BARREL_DESCRIPTORS,
-  BODY_DESCRIPTORS,
   DECAL_DESCRIPTORS,
-  PATTERN_DESCRIPTORS,
-  type BarrelStyle,
-  type BodyStyle,
+  isFreeDecal,
   type DecalStyle,
   type Loadout,
-  PALETTE_ACCENT,
-  PALETTE_PRIMARY,
-  type PatternStyle,
-  TURRET_DESCRIPTORS,
-  type TurretStyle,
+  type LoadoutSelection,
 } from "@artillery/shared";
-import { loadLoadout, saveLoadout } from "../game/loadoutStorage";
+import { useAuth } from "../auth/AuthProvider";
+import type { TankListing } from "../auth/authClient";
+import { useShop } from "../shop/ShopProvider";
 import { drawTankPreview, renderLoadoutCanvas } from "../game/tankPreview";
 import type { Route } from "../router";
 import { click } from "../ui/sfx";
 
 interface Props { navigate: (r: Route) => void; }
 
-type Tab = "hull" | "turret" | "barrel" | "pattern" | "decal" | "paint";
+type Tab = "tanks" | "decal" | "shop";
 
 const TABS: { id: Tab; label: string; section: string; title: string; sub: string }[] = [
-  { id: "hull",    label: "Hull",    section: "01", title: "Hull Catalog",   sub: "Chassis & superstructure" },
-  { id: "turret",  label: "Turret",  section: "02", title: "Turret Catalog", sub: "Mantlet assemblies" },
-  { id: "barrel",  label: "Barrel",  section: "03", title: "Barrel Catalog", sub: "Main armament" },
-  { id: "pattern", label: "Pattern", section: "04", title: "Pattern Stock",  sub: "Field markings" },
-  { id: "decal",   label: "Decal",   section: "05", title: "Decal Stock",    sub: "Unit insignia" },
-  { id: "paint",   label: "Paint",   section: "06", title: "Paint Chips",    sub: "Field, accent, pattern" },
+  { id: "tanks", label: "Tanks", section: "01", title: "Motor Pool",     sub: "Issue a vehicle" },
+  { id: "decal", label: "Decal", section: "02", title: "Insignia Stock", sub: "Unit markings" },
+  { id: "shop",  label: "Shop",  section: "03", title: "Quartermaster",  sub: "Theme tanks" },
 ];
 
 function hex(n: number): string {
@@ -42,12 +28,25 @@ function hex(n: number): string {
 }
 
 export function CustomizePage(_: Props): JSX.Element {
-  const [l, setL] = useState<Loadout>(() => loadLoadout());
-  const [tab, setTab] = useState<Tab>("hull");
+  const { selection, loadout, ownedTanks, ownedDecals, tanks, setSelection, refreshShop } =
+    useShop();
+
+  const initialTab: Tab = (() => {
+    if (typeof window === "undefined") return "tanks";
+    const qs = new URLSearchParams(window.location.hash.split("?")[1] ?? "");
+    if (qs.get("purchase") === "success" || qs.get("tab") === "shop") return "shop";
+    return "tanks";
+  })();
+  const [tab, setTab] = useState<Tab>(initialTab);
+  const [highlightSku, setHighlightSku] = useState<string | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const floorRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => saveLoadout(l), [l]);
+  // After the Xsolla redirect lands on /#/customize?purchase=success,
+  // refresh ownedTanks so the new entitlement is reflected immediately.
+  useEffect(() => {
+    if (initialTab === "shop") void refreshShop();
+  }, [initialTab, refreshShop]);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -63,16 +62,19 @@ export function CustomizePage(_: Props): JSX.Element {
       const ctx = c.getContext("2d");
       if (!ctx) return;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-      drawHangarTank(c, l, logicalW, logicalH);
+      drawHangarTank(c, loadout, logicalW, logicalH);
     };
 
     render();
     const ro = new ResizeObserver(render);
     ro.observe(host);
     return () => ro.disconnect();
-  }, [l]);
+  }, [loadout]);
 
-  const set = (patch: Partial<Loadout>) => { click(); setL({ ...l, ...patch }); };
+  const setSel = (patch: Partial<LoadoutSelection>) => {
+    click();
+    setSelection({ ...selection, ...patch });
+  };
   const pickTab = (t: Tab) => { click(); setTab(t); };
 
   const meta = TABS.find((t) => t.id === tab)!;
@@ -90,34 +92,6 @@ export function CustomizePage(_: Props): JSX.Element {
           <div className="hangar-stencil hangar-stencil-line">
             EYE &amp; EAR PROTECTION · NO SMOKING · ENGINE OFF
           </div>
-          <svg
-            className="hangar-tools"
-            viewBox="0 0 220 56"
-            preserveAspectRatio="none"
-            aria-hidden
-          >
-            <defs>
-              <linearGradient id="metal" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" stopColor="#cfd2d8" />
-                <stop offset="100%" stopColor="#5a606e" />
-              </linearGradient>
-            </defs>
-            <g fill="url(#metal)" stroke="#000" strokeWidth="0.6">
-              <rect x="6" y="14" width="3" height="36" />
-              <circle cx="7.5" cy="12" r="3.5" fill="none" strokeWidth="2" />
-              <rect x="40" y="14" width="3" height="32" />
-              <polygon points="38,46 46,46 42,52" />
-              <rect x="74" y="12" width="2.5" height="38" />
-              <rect x="70" y="10" width="10" height="6" rx="1" />
-              <rect x="108" y="14" width="14" height="3" rx="1" />
-              <rect x="112" y="14" width="3" height="34" />
-              <rect x="142" y="14" width="3" height="34" />
-              <rect x="138" y="48" width="11" height="4" rx="1" />
-              <rect x="176" y="14" width="3" height="34" />
-              <circle cx="177.5" cy="12" r="3" fill="none" strokeWidth="1.5" />
-              <rect x="174" y="48" width="7" height="4" />
-            </g>
-          </svg>
         </div>
 
         <div className="hangar-floor" ref={floorRef}>
@@ -127,13 +101,13 @@ export function CustomizePage(_: Props): JSX.Element {
         </div>
       </section>
 
-      <section className="parts-binder clipboard" aria-label="Parts catalog">
+      <section className="parts-binder clipboard" aria-label="Customisation">
         <div className="clipboard-clip" aria-hidden>
           <span className="clipboard-clip-screw clipboard-clip-screw-l" />
           <span className="clipboard-clip-screw clipboard-clip-screw-r" />
         </div>
 
-        <div className="thumb-tabs" role="tablist" aria-label="Part section">
+        <div className="thumb-tabs" role="tablist" aria-label="Section">
           {TABS.map((t) => (
             <button
               key={t.id}
@@ -150,7 +124,7 @@ export function CustomizePage(_: Props): JSX.Element {
 
         <div className="binder-page">
           <span className="paper-paperclip" aria-hidden />
-          <div className="binder-page-stamp">{serial(l)}</div>
+          <div className="binder-page-stamp">{serial(selection)}</div>
           <header className="binder-page-header">
             <div className="binder-page-num">SECTION {meta.section}</div>
             <h3 className="binder-page-title">{meta.title}</h3>
@@ -158,92 +132,47 @@ export function CustomizePage(_: Props): JSX.Element {
           </header>
 
           <div className="binder-page-body">
-            {tab === "hull" && (
-              <PhotoGrid
-                options={ALL_BODIES.map((id) => ({
-                  id,
-                  label: BODY_DESCRIPTORS[id].label,
-                  blurb: BODY_DESCRIPTORS[id].blurb,
-                }))}
-                value={l.body}
-                onPick={(v) => set({ body: v as BodyStyle })}
-                loadoutFor={(id) => ({ ...l, body: id as BodyStyle })}
-              />
-            )}
-
-            {tab === "turret" && (
-              <PhotoGrid
-                options={ALL_TURRETS.map((id) => ({
-                  id,
-                  label: TURRET_DESCRIPTORS[id].label,
-                  blurb: TURRET_DESCRIPTORS[id].blurb,
-                }))}
-                value={l.turret}
-                onPick={(v) => set({ turret: v as TurretStyle })}
-                loadoutFor={(id) => ({ ...l, turret: id as TurretStyle })}
-              />
-            )}
-
-            {tab === "barrel" && (
-              <PhotoGrid
-                options={ALL_BARRELS.map((id) => ({
-                  id,
-                  label: BARREL_DESCRIPTORS[id].label,
-                  blurb: BARREL_DESCRIPTORS[id].blurb,
-                }))}
-                value={l.barrel}
-                onPick={(v) => set({ barrel: v as BarrelStyle })}
-                loadoutFor={(id) => ({ ...l, barrel: id as BarrelStyle })}
-              />
-            )}
-
-            {tab === "pattern" && (
-              <PhotoGrid
-                options={ALL_PATTERNS.map((id) => ({
-                  id,
-                  label: PATTERN_DESCRIPTORS[id].label,
-                  blurb: PATTERN_DESCRIPTORS[id].blurb,
-                }))}
-                value={l.pattern}
-                onPick={(v) => set({ pattern: v as PatternStyle })}
-                loadoutFor={(id) => ({ ...l, pattern: id as PatternStyle })}
+            {tab === "tanks" && (
+              <TankGrid
+                tanks={tanks}
+                selectedSku={selection.tankSku}
+                ownedTanks={ownedTanks}
+                onPick={(sku) => {
+                  if (!ownedTanks.has(sku) && tanks.find((t) => t.sku === sku)?.priceCents) {
+                    click();
+                    setHighlightSku(sku);
+                    setTab("shop");
+                    return;
+                  }
+                  setSel({ tankSku: sku });
+                }}
+                currentDecal={selection.decal}
               />
             )}
 
             {tab === "decal" && (
-              <PhotoGrid
-                options={ALL_DECALS.map((id) => ({
-                  id,
-                  label: DECAL_DESCRIPTORS[id].label,
-                  blurb: DECAL_DESCRIPTORS[id].blurb,
-                }))}
-                value={l.decal}
-                onPick={(v) => set({ decal: v as DecalStyle })}
-                loadoutFor={(id) => ({ ...l, decal: id as DecalStyle })}
+              <DecalGrid
+                ownedDecals={ownedDecals}
+                tanks={tanks}
+                value={selection.decal}
+                onPick={(d) => {
+                  if (ownedDecals.has(d)) {
+                    setSel({ decal: d });
+                    return;
+                  }
+                  // Locked decal → jump to shop and highlight a tank that grants it.
+                  const granting = tanks.find((t) => t.bonusDecals.includes(d) && !t.owned);
+                  click();
+                  if (granting) setHighlightSku(granting.sku);
+                  setTab("shop");
+                }}
+                tankPaint={loadout}
+                equippedTankParts={loadout}
               />
             )}
 
-            {tab === "paint" && (
-              <>
-                <PaintChipRow
-                  title="Field"
-                  swatches={PALETTE_PRIMARY}
-                  value={l.primaryColor}
-                  onChange={(v) => set({ primaryColor: v })}
-                />
-                <PaintChipRow
-                  title="Accent"
-                  swatches={PALETTE_ACCENT}
-                  value={l.accentColor}
-                  onChange={(v) => set({ accentColor: v })}
-                />
-                <PaintChipRow
-                  title="Pattern"
-                  swatches={PALETTE_PRIMARY}
-                  value={l.patternColor}
-                  onChange={(v) => set({ patternColor: v })}
-                />
-              </>
+            {tab === "shop" && (
+              <ShopGrid tanks={tanks} highlightSku={highlightSku} />
             )}
           </div>
         </div>
@@ -252,47 +181,169 @@ export function CustomizePage(_: Props): JSX.Element {
   );
 }
 
-
 const PHOTO_PAGE_SIZE = 4;
 
-function PhotoGrid({
-  options, value, onPick, loadoutFor,
+function TankGrid({
+  tanks, selectedSku, ownedTanks, onPick, currentDecal,
 }: {
-  options: { id: string; label: string; blurb: string }[];
-  value: string;
-  onPick: (v: string) => void;
-  loadoutFor: (id: string) => Loadout;
+  tanks: TankListing[];
+  selectedSku: string;
+  ownedTanks: ReadonlySet<string>;
+  onPick: (sku: string) => void;
+  currentDecal: DecalStyle;
 }) {
-  const total = Math.max(1, Math.ceil(options.length / PHOTO_PAGE_SIZE));
+  // Owned tanks first (free starters + paid the player owns), then locked.
+  const ordered = useMemo(() => {
+    return [...tanks].sort((a, b) => {
+      const ao = a.owned || ownedTanks.has(a.sku) ? 0 : 1;
+      const bo = b.owned || ownedTanks.has(b.sku) ? 0 : 1;
+      return ao - bo;
+    });
+  }, [tanks, ownedTanks]);
+
+  const total = Math.max(1, Math.ceil(ordered.length / PHOTO_PAGE_SIZE));
   const [page, setPage] = useState(() => {
-    const i = options.findIndex((o) => o.id === value);
+    const i = ordered.findIndex((t) => t.sku === selectedSku);
     return i < 0 ? 0 : Math.floor(i / PHOTO_PAGE_SIZE);
   });
   const safePage = Math.min(page, total - 1);
   const start = safePage * PHOTO_PAGE_SIZE;
-  const visible = options.slice(start, start + PHOTO_PAGE_SIZE);
+  const visible = ordered.slice(start, start + PHOTO_PAGE_SIZE);
 
   return (
     <div className="catalog-page">
       <div className="photo-grid">
-        {visible.map((opt, i) => (
-          <button
-            key={opt.id}
-            type="button"
-            className={`photo-card ${value === opt.id ? "active" : ""}`}
-            onClick={() => onPick(opt.id)}
-            title={opt.blurb}
-            style={{ "--tilt": `${(((start + i) * 17) % 5) - 2}deg` } as React.CSSProperties}
-          >
-            <span className="photo-tape" aria-hidden />
-            <PhotoCanvas loadout={loadoutFor(opt.id)} />
-            <div className="photo-caption">{opt.label}</div>
-          </button>
-        ))}
+        {visible.map((t, i) => {
+          const owned = t.owned;
+          const locked = !owned;
+          const title = locked
+            ? `${t.blurb} — locked. Unlock for $${(t.priceCents / 100).toFixed(2)}.`
+            : t.blurb;
+          return (
+            <button
+              key={t.sku}
+              type="button"
+              className={`photo-card ${selectedSku === t.sku ? "active" : ""} ${locked ? "locked" : ""}`}
+              onClick={() => onPick(t.sku)}
+              title={title}
+              style={{ "--tilt": `${(((start + i) * 17) % 5) - 2}deg` } as React.CSSProperties}
+            >
+              <span className="photo-tape" aria-hidden />
+              <PhotoCanvas loadout={tankToLoadout(t, currentDecal)} />
+              <div className="photo-caption">{t.label}</div>
+              {locked && (
+                <span className="photo-lock" aria-hidden>
+                  <span className="photo-lock-glyph">🔒</span>
+                  <span className="photo-lock-price">${(t.priceCents / 100).toFixed(2)}</span>
+                </span>
+              )}
+            </button>
+          );
+        })}
       </div>
       {total > 1 && <Pager page={safePage} total={total} onChange={setPage} />}
     </div>
   );
+}
+
+function DecalGrid({
+  ownedDecals, tanks, value, onPick, tankPaint, equippedTankParts,
+}: {
+  ownedDecals: ReadonlySet<DecalStyle>;
+  tanks: TankListing[];
+  value: DecalStyle;
+  onPick: (d: DecalStyle) => void;
+  tankPaint: { primaryColor: number; accentColor: number; patternColor: number };
+  equippedTankParts: { body: string; turret: string; barrel: string; pattern: string };
+}) {
+  const allDecals = Object.values(DECAL_DESCRIPTORS).map((d) => ({
+    id: d.id,
+    label: d.label,
+    blurb: d.blurb,
+  }));
+
+  // Sort: free + owned first, then locked.
+  const ordered = useMemo(() => {
+    return [...allDecals].sort((a, b) => {
+      const ao = ownedDecals.has(a.id as DecalStyle) ? 0 : 1;
+      const bo = ownedDecals.has(b.id as DecalStyle) ? 0 : 1;
+      return ao - bo;
+    });
+  }, [allDecals, ownedDecals]);
+
+  const total = Math.max(1, Math.ceil(ordered.length / PHOTO_PAGE_SIZE));
+  const [page, setPage] = useState(() => {
+    const i = ordered.findIndex((o) => o.id === value);
+    return i < 0 ? 0 : Math.floor(i / PHOTO_PAGE_SIZE);
+  });
+  const safePage = Math.min(page, total - 1);
+  const start = safePage * PHOTO_PAGE_SIZE;
+  const visible = ordered.slice(start, start + PHOTO_PAGE_SIZE);
+
+  return (
+    <div className="catalog-page">
+      <div className="photo-grid">
+        {visible.map((opt, i) => {
+          const owned = ownedDecals.has(opt.id as DecalStyle);
+          const locked = !owned;
+          const grantedBy = locked
+            ? tanks.find((t) => t.bonusDecals.includes(opt.id))
+            : null;
+          const title = locked && grantedBy
+            ? `${opt.blurb} — unlock with ${grantedBy.label} ($${(grantedBy.priceCents / 100).toFixed(2)}).`
+            : isFreeDecal(opt.id) ? `${opt.blurb} (free)` : `${opt.blurb} — included with ${grantingTankLabel(opt.id, tanks) ?? "a tank"}.`;
+          const previewLoadout: Loadout = {
+            body: equippedTankParts.body as Loadout["body"],
+            turret: equippedTankParts.turret as Loadout["turret"],
+            barrel: equippedTankParts.barrel as Loadout["barrel"],
+            pattern: equippedTankParts.pattern as Loadout["pattern"],
+            decal: opt.id as DecalStyle,
+            primaryColor: tankPaint.primaryColor,
+            accentColor: tankPaint.accentColor,
+            patternColor: tankPaint.patternColor,
+          };
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              className={`photo-card ${value === opt.id ? "active" : ""} ${locked ? "locked" : ""}`}
+              onClick={() => onPick(opt.id as DecalStyle)}
+              title={title}
+              style={{ "--tilt": `${(((start + i) * 17) % 5) - 2}deg` } as React.CSSProperties}
+            >
+              <span className="photo-tape" aria-hidden />
+              <PhotoCanvas loadout={previewLoadout} />
+              <div className="photo-caption">{opt.label}</div>
+              {locked && grantedBy && (
+                <span className="photo-lock" aria-hidden>
+                  <span className="photo-lock-glyph">🔒</span>
+                  <span className="photo-lock-price">${(grantedBy.priceCents / 100).toFixed(2)}</span>
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+      {total > 1 && <Pager page={safePage} total={total} onChange={setPage} />}
+    </div>
+  );
+}
+
+function grantingTankLabel(decal: string, tanks: TankListing[]): string | null {
+  return tanks.find((t) => t.bonusDecals.includes(decal))?.label ?? null;
+}
+
+function tankToLoadout(t: TankListing, decal: DecalStyle): Loadout {
+  return {
+    body: t.body as Loadout["body"],
+    turret: t.turret as Loadout["turret"],
+    barrel: t.barrel as Loadout["barrel"],
+    pattern: t.pattern as Loadout["pattern"],
+    decal,
+    primaryColor: t.paint.primary,
+    accentColor: t.paint.accent,
+    patternColor: t.paint.pattern,
+  };
 }
 
 function Pager({
@@ -355,43 +406,67 @@ function PhotoCanvas({ loadout: lo }: { loadout: Loadout }) {
   return <canvas ref={ref} className="photo-img" />;
 }
 
-const CHIP_PAGE_SIZE = 6;
+const SHOP_PAGE_SIZE = 2;
 
-function PaintChipRow({
-  title, swatches, value, onChange,
+function ShopGrid({
+  tanks, highlightSku,
 }: {
-  title: string;
-  swatches: number[];
-  value: number;
-  onChange: (v: number) => void;
-}) {
-  const total = Math.max(1, Math.ceil(swatches.length / CHIP_PAGE_SIZE));
+  tanks: TankListing[];
+  highlightSku: string | null;
+}): JSX.Element {
+  const { session } = useAuth();
+  const { buyTank } = useShop();
+  const [busySku, setBusySku] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  // Shop only lists paid tanks (free starters live in the Tanks tab).
+  const paid = useMemo(() => tanks.filter((t) => t.priceCents > 0), [tanks]);
+
+  const total = Math.max(1, Math.ceil(paid.length / SHOP_PAGE_SIZE));
   const [page, setPage] = useState(() => {
-    const i = swatches.indexOf(value);
-    return i < 0 ? 0 : Math.floor(i / CHIP_PAGE_SIZE);
+    if (!highlightSku) return 0;
+    const i = paid.findIndex((t) => t.sku === highlightSku);
+    return i < 0 ? 0 : Math.floor(i / SHOP_PAGE_SIZE);
   });
   const safePage = Math.min(page, total - 1);
-  const start = safePage * CHIP_PAGE_SIZE;
-  const visible = swatches.slice(start, start + CHIP_PAGE_SIZE);
+  const start = safePage * SHOP_PAGE_SIZE;
+  const visible = paid.slice(start, start + SHOP_PAGE_SIZE);
+
+  const onBuy = async (sku: string) => {
+    click();
+    setError(null);
+    if (!session) {
+      setError("Create an account or log in to purchase.");
+      return;
+    }
+    setBusySku(sku);
+    try {
+      const url = await buyTank(sku);
+      window.location.assign(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Checkout failed");
+      setBusySku(null);
+    }
+  };
 
   return (
-    <div className="paint-chip-row">
-      <div className="paint-chip-row-head">
-        <div className="paint-chip-row-title">{title}</div>
-        <HexPicker value={value} onChange={onChange} />
-      </div>
-      <div className="paint-chip-strip">
-        {visible.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={`paint-chip ${value === c ? "active" : ""}`}
-            onClick={() => onChange(c)}
-            aria-label={`Color ${c.toString(16)}`}
-          >
-            <span className="paint-chip-color" style={{ background: hex(c) }} />
-            <span className="paint-chip-hex">{hex(c).toUpperCase()}</span>
-          </button>
+    <div className="catalog-page shop-grid">
+      {!session && (
+        <div className="shop-banner">
+          Log in or create an account to purchase tanks.
+        </div>
+      )}
+      {error && <div className="shop-banner shop-banner-error">{error}</div>}
+      <div className="bundle-list">
+        {visible.map((t) => (
+          <TankCard
+            key={t.sku}
+            tank={t}
+            highlight={t.sku === highlightSku}
+            busy={busySku === t.sku}
+            disabled={!session || t.owned}
+            onBuy={() => onBuy(t.sku)}
+          />
         ))}
       </div>
       {total > 1 && <Pager page={safePage} total={total} onChange={setPage} />}
@@ -399,55 +474,64 @@ function PaintChipRow({
   );
 }
 
-function HexPicker({
-  value, onChange,
-}: { value: number; onChange: (v: number) => void }) {
-  const h = hex(value);
-  const [text, setText] = useState(h);
-  useEffect(() => setText(h), [h]);
-  const commit = (raw: string) => {
-    const clean = raw.trim().replace(/^#/, "");
-    if (/^[0-9a-fA-F]{6}$/.test(clean)) onChange(parseInt(clean, 16));
-    else if (/^[0-9a-fA-F]{3}$/.test(clean)) {
-      const [r, g, b] = clean.split("");
-      onChange(parseInt(`${r}${r}${g}${g}${b}${b}`, 16));
-    }
-  };
+function TankCard({
+  tank, highlight, busy, disabled, onBuy,
+}: {
+  tank: TankListing;
+  highlight: boolean;
+  busy: boolean;
+  disabled: boolean;
+  onBuy: () => void;
+}) {
+  const previewLoadout: Loadout = tankToLoadout(
+    tank,
+    (tank.bonusDecals[0] as DecalStyle) ?? "none",
+  );
   return (
-    <div className="hex-picker">
-      <label className="hex-picker-swatch">
-        <input
-          type="color"
-          value={h}
-          onChange={(e) => onChange(parseInt(e.target.value.replace(/^#/, ""), 16))}
-        />
-        <span className="hex-picker-chip" style={{ background: h }} />
-      </label>
-      <input
-        type="text"
-        className="hex-picker-text"
-        value={text}
-        spellCheck={false}
-        maxLength={7}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={() => commit(text)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-        }}
-        placeholder="#rrggbb"
-      />
+    <div className={`bundle-card ${highlight ? "highlight" : ""} ${tank.owned ? "owned" : ""}`}>
+      <div className="bundle-preview">
+        <PhotoCanvas loadout={previewLoadout} />
+      </div>
+      <div className="bundle-body">
+        <div className="bundle-head">
+          <h4 className="bundle-label">{tank.label}</h4>
+          <div className="bundle-price">
+            {tank.owned ? "Owned" : `$${(tank.priceCents / 100).toFixed(2)}`}
+          </div>
+        </div>
+        <p className="bundle-blurb">{tank.blurb}</p>
+        {tank.bonusDecals.length > 0 && (
+          <ul className="bundle-parts">
+            <li>
+              Bonus: {tank.bonusDecals.join(", ")}{" "}
+              {tank.bonusDecals.length === 1 ? "decal" : "decals"}
+            </li>
+          </ul>
+        )}
+        <button
+          type="button"
+          className="bundle-buy"
+          disabled={disabled || busy}
+          onClick={onBuy}
+        >
+          {tank.owned
+            ? "Owned"
+            : busy
+              ? "Opening checkout…"
+              : `Buy — $${(tank.priceCents / 100).toFixed(2)}`}
+        </button>
+      </div>
     </div>
   );
 }
 
-function serial(l: Loadout): string {
+function serial(s: LoadoutSelection): string {
   const h = [
-    l.body.charCodeAt(0),
-    l.turret.charCodeAt(0),
-    l.barrel.charCodeAt(0),
-    l.primaryColor & 0xff,
-    l.accentColor & 0xff,
-  ].map((n) => n.toString(16).padStart(2, "0").toUpperCase()).join("");
+    s.tankSku.charCodeAt(0) ^ s.tankSku.charCodeAt(s.tankSku.length - 1),
+    s.decal.charCodeAt(0),
+    s.tankSku.length,
+    s.decal.length,
+  ].map((n) => (n & 0xff).toString(16).padStart(2, "0").toUpperCase()).join("");
   return `TNK-${h}`;
 }
 
@@ -467,7 +551,6 @@ function drawHangarTank(
       .getPropertyValue("--theme-accent-rgb").trim()
   ) || "224, 120, 69";
 
-  // Tank sits left of center so the floating clipboard doesn't occlude it.
   const cx = w * 0.4;
   const groundY = Math.round(h * 0.62);
 

@@ -1,7 +1,7 @@
 import { Client, Room } from "colyseus.js";
 import { BattleState, type RoomJoinOptions } from "@artillery/shared";
 import { authStorage } from "../auth/authClient";
-import { loadLoadout } from "../game/loadoutStorage";
+import { loadSelection } from "../game/loadoutStorage";
 
 function endpoint(): string {
   const isSecure = location.protocol === "https:";
@@ -61,11 +61,11 @@ export interface JoinBattleOptions {
 export async function joinBattle(opts: JoinBattleOptions): Promise<Room<BattleState>> {
   const c = getClient();
   const session = authStorage.load();
-  const loadout = loadLoadout();
+  const selection = loadSelection();
   const joinOptions: RoomJoinOptions = {
     mode: opts.mode,
     username: opts.username,
-    loadout,
+    loadout: selection,
     ...(opts.inviteCode ? { inviteCode: opts.inviteCode } : {}),
     ...(opts.botCount != null ? { botCount: opts.botCount } : {}),
     ...(opts.botDifficulty ? { botDifficulty: opts.botDifficulty } : {}),

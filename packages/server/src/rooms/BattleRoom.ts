@@ -26,7 +26,9 @@ import {
   ITEM_TUNING,
   TARGETED_ITEMS,
   randomBiome,
-  sanitizeLoadout,
+  downgradeSelection,
+  resolveSelection,
+  sanitizeSelection,
 } from "@artillery/shared";
 import { World, type Input as PlayerInput } from "../physics/World.js";
 import { BotBrain } from "./Bot.js";
@@ -265,13 +267,21 @@ export class BattleRoom extends Room<BattleState> {
     p.team = 0;
     p.color = this.nextTankColor(p.team);
     p.angle = 45;
-    // Apply saved loadout (client sends via join options — also persists
-    // server-side for authed users via /api/me/loadout).
-    const loadout = sanitizeLoadout(
-      ((options as RoomJoinOptions).loadout ?? accountInfo?.loadout) as
+    // Selection source order: persisted server-side selection (authoritative
+    // for authed users), then the client's localStorage copy in join
+    // options. Premium tanks/decals the user doesn't own are silently
+    // swapped for the default tank + "none" decal so an out-of-date
+    // client can't visually wear something it didn't pay for.
+    const rawSelection = sanitizeSelection(
+      (accountInfo?.selection ?? (options as RoomJoinOptions).loadout) as
         | Record<string, unknown>
         | undefined,
     );
+    const selection = downgradeSelection(
+      rawSelection,
+      accountInfo?.ownedSkus ?? new Set(),
+    );
+    const loadout = resolveSelection(selection);
     // Team mode locks tank color to the team palette so allies/enemies
     // are unmistakable at a glance. Other cosmetics still apply.
     if (!this.state.teamMode) {

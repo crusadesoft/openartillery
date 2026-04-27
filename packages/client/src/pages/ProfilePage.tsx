@@ -1,9 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../auth/authClient";
-import type { PublicProfile } from "@artillery/shared";
+import {
+  TANKS,
+  resolveSelection,
+  type DecalStyle,
+  type Loadout,
+  type PublicProfile,
+} from "@artillery/shared";
 import type { Route } from "../router";
 import { useAuth } from "../auth/AuthProvider";
-import { loadLoadout } from "../game/loadoutStorage";
+import { loadSelection } from "../game/loadoutStorage";
 import { renderLoadoutCanvas } from "../game/tankPreview";
 import { RANKS, rankFor } from "../game/ranks";
 
@@ -180,26 +186,6 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
 // Deterministic pseudo-loadout derived from a username — same technique
 // the leaderboard uses so every operator has a distinct silhouette even
 // when the server doesn't persist public loadouts yet.
-const OP_BODIES = [
-  "heavy", "light", "assault", "scout", "siege",
-  "bunker", "recon", "speeder",
-] as const;
-const OP_TURRETS = [
-  "standard", "angular", "low", "wedge", "dome",
-  "box", "tall", "twin",
-] as const;
-const OP_BARRELS = [
-  "standard", "heavy", "long", "sniper", "stubby",
-  "mortar", "twin", "rail",
-] as const;
-const OP_FIELD_COLORS = [
-  0x3a2e1b, 0x4a3d28, 0x2e3a22, 0x1f2b1a, 0x2c2823,
-  0x5a2a1e, 0x38363a, 0x6b3d1a, 0x1a2430, 0x211515,
-];
-const OP_ACCENTS = [
-  0xb28a3d, 0x8a6a1a, 0x6a2820, 0x2e3a22, 0xb7a78a, 0x3a2010, 0x5a5a55,
-];
-
 /** Build a fake PublicProfile from a username hash so the leaderboard's
  *  synthetic roster slots still open a viewable profile instead of
  *  dead-ending on a 404. Stats, MMR, matches etc. all vary per username
@@ -238,28 +224,18 @@ function caseNumberFor(id: string): string {
   return `${year}-${seq}`;
 }
 
-const OP_PATTERNS = [
-  "solid", "stripes", "tiger", "digital", "chevron",
-  "splinter", "urban", "hex",
-] as const;
-const OP_DECALS = [
-  "none", "number", "star", "skull", "crosshair",
-  "cross", "flame", "shield",
-] as const;
-const OP_PATTERN_COLORS = [0x1a140c, 0x0a0a10, 0x3a2a18, 0x1f1a12];
+const OP_DECALS: DecalStyle[] = [
+  "none", "star", "skull", "crosshair", "cross", "flame", "shield",
+];
 
-function loadoutFromUsername(username: string): ReturnType<typeof loadLoadout> {
+function loadoutFromUsername(username: string): Loadout {
   const h = opHash(username);
-  return {
-    body: OP_BODIES[h % OP_BODIES.length]!,
-    turret: OP_TURRETS[(h >> 3) % OP_TURRETS.length]!,
-    barrel: OP_BARRELS[(h >> 6) % OP_BARRELS.length]!,
-    pattern: OP_PATTERNS[(h >> 15) % OP_PATTERNS.length]!,
-    decal: OP_DECALS[(h >> 18) % OP_DECALS.length]!,
-    primaryColor: OP_FIELD_COLORS[(h >> 9) % OP_FIELD_COLORS.length]!,
-    accentColor: OP_ACCENTS[(h >> 12) % OP_ACCENTS.length]!,
-    patternColor: OP_PATTERN_COLORS[(h >> 21) % OP_PATTERN_COLORS.length]!,
-  } as ReturnType<typeof loadLoadout>;
+  // Pick a tank deterministically so the same operator always shows the
+  // same hull, then layer a deterministic decal on top of the tank's
+  // factory paint job.
+  const tank = TANKS[h % TANKS.length]!;
+  const decal = OP_DECALS[(h >> 18) % OP_DECALS.length]!;
+  return resolveSelection({ tankSku: tank.sku, decal });
 }
 
 function OperatorVehicleCard({ username }: { username: string }): JSX.Element {
@@ -292,7 +268,7 @@ function OperatorVehicleCard({ username }: { username: string }): JSX.Element {
 }
 
 function SelfVehicleCard(): JSX.Element {
-  const l = loadLoadout();
+  const l = resolveSelection(loadSelection());
   const ref = useRef<HTMLCanvasElement>(null);
   const W = 360, H = 220;
   useEffect(() => {
@@ -324,7 +300,7 @@ function drawProfileTank(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  l: ReturnType<typeof loadLoadout>,
+  l: Loadout,
 ): void {
   renderLoadoutCanvas(ctx, {
     width: w,

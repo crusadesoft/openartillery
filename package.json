@@ -3,6 +3,7 @@
   "private": true,
   "version": "0.1.0",
   "description": "Free multiplayer browser artillery game — turn-based tank combat with destructible terrain, wind, and gravity.",
+  "license": "UNLICENSED",
   "workspaces": [
     "packages/shared",
     "packages/server",

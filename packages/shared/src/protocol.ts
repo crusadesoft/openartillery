@@ -36,12 +36,11 @@ export interface RoomJoinOptions {
   teamCount?: number;
   /** Only read on create: whether allies take splash damage in custom team mode. */
   friendlyFire?: boolean;
+  /** Tank + decal selection. Server expands the tank SKU into the
+   *  full part/colour set on join. */
   loadout?: {
-    body: string;
-    turret: string;
-    barrel: string;
-    primaryColor: number;
-    accentColor: number;
+    tankSku: string;
+    decal: string;
   };
 }
 

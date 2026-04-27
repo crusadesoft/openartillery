@@ -11,7 +11,7 @@ export type PatternStyle =
   | "solid" | "stripes" | "tiger" | "digital" | "chevron"
   | "splinter" | "urban" | "hex";
 export type DecalStyle =
-  | "none" | "number" | "star" | "skull" | "crosshair"
+  | "none" | "star" | "skull" | "crosshair"
   | "cross" | "flame" | "shield";
 
 export interface Loadout {
@@ -53,7 +53,7 @@ export const ALL_PATTERNS: PatternStyle[] = [
   "splinter", "urban", "hex",
 ];
 export const ALL_DECALS: DecalStyle[] = [
-  "none", "number", "star", "skull", "crosshair",
+  "none", "star", "skull", "crosshair",
   "cross", "flame", "shield",
 ];
 
@@ -109,7 +109,6 @@ export const PATTERN_DESCRIPTORS: Record<PatternStyle, PartDescriptor<PatternSty
 
 export const DECAL_DESCRIPTORS: Record<DecalStyle, PartDescriptor<DecalStyle>> = {
   none:      { id: "none",      label: "None",      blurb: "Clean hull. No markings." },
-  number:    { id: "number",    label: "Number",    blurb: "Large unit number on the turret side." },
   star:      { id: "star",      label: "Star",      blurb: "Allied white star." },
   skull:     { id: "skull",     label: "Skull",     blurb: "Jolly roger. Intimidation factor." },
   crosshair: { id: "crosshair", label: "Reticle",   blurb: "Tactical reticle stencil." },

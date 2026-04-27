@@ -5,12 +5,23 @@ import { db, schema } from "../db/index.js";
 import { apiLimiter } from "../middleware/rateLimit.js";
 import { optionalAuth, requireAuth, type AuthedRequest } from "../middleware/auth.js";
 import { asyncHandler, HttpError } from "../middleware/error.js";
-import type {
-  LeaderboardEntry,
-  LobbySummary,
-  MatchSummary,
-  PublicProfile,
+import {
+  isPaidTankSku,
+  isTankSku,
+  type LeaderboardEntry,
+  type LoadoutSelection,
+  type LobbySummary,
+  type MatchSummary,
+  type PublicProfile,
 } from "@artillery/shared";
+import {
+  getOwnedTankSkus,
+  grantEntitlement,
+  listTanks,
+  loadOwnedSelection,
+  saveSelection,
+} from "../shop/service.js";
+import { createCheckout } from "../shop/xsolla.js";
 
 export const apiRouter = Router();
 apiRouter.use(apiLimiter);
@@ -186,5 +197,84 @@ apiRouter.get(
       limit: 50,
     });
     res.json({ participants: parts });
+  }),
+);
+
+apiRouter.get(
+  "/me/loadout",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const { auth } = req as AuthedRequest;
+    const { selection, ownedTanks } = await loadOwnedSelection(auth.userId);
+    res.json({ selection, ownedSkus: [...ownedTanks] });
+  }),
+);
+
+apiRouter.put(
+  "/me/loadout",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const { auth } = req as AuthedRequest;
+    const incoming = (req.body ?? {}) as Partial<LoadoutSelection>;
+    const saved = await saveSelection(auth.userId, incoming);
+    res.json({ selection: saved });
+  }),
+);
+
+apiRouter.get(
+  "/shop/tanks",
+  optionalAuth(),
+  asyncHandler(async (req, res) => {
+    const auth = (req as AuthedRequest).auth;
+    const owned = auth ? await getOwnedTankSkus(auth.userId) : new Set<string>();
+    res.json({ tanks: listTanks(owned) });
+  }),
+);
+
+apiRouter.post(
+  "/shop/checkout",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const { auth } = req as AuthedRequest;
+    const sku = String(req.body?.sku ?? "");
+    if (!isTankSku(sku) || !isPaidTankSku(sku)) {
+      throw new HttpError(400, "unknown or free sku", "bad_request");
+    }
+    const owned = await getOwnedTankSkus(auth.userId);
+    if (owned.has(sku)) {
+      throw new HttpError(409, "already owned", "already_owned");
+    }
+    try {
+      const session = await createCheckout(auth.userId, auth.username, sku);
+      res.json({ url: session.url });
+    } catch (err) {
+      throw new HttpError(
+        503,
+        err instanceof Error ? err.message : "checkout failed",
+        "checkout_failed",
+      );
+    }
+  }),
+);
+
+// Local-dev convenience: SHOP_DEV_MODE returns a synthetic checkout URL that
+// hits this endpoint, which immediately grants the entitlement. Production
+// builds (SHOP_DEV_MODE=false) treat this as a 404.
+apiRouter.get(
+  "/shop/dev-grant",
+  requireAuth(),
+  asyncHandler(async (req, res) => {
+    const { config } = await import("../config.js");
+    if (!config.SHOP_DEV_MODE) {
+      throw new HttpError(404, "not found", "not_found");
+    }
+    const { auth } = req as AuthedRequest;
+    const sku = String(req.query.sku ?? "");
+    const externalId = String(req.query.externalId ?? "");
+    if (!isPaidTankSku(sku)) {
+      throw new HttpError(400, "unknown or free sku", "bad_request");
+    }
+    await grantEntitlement(auth.userId, sku, "dev", externalId);
+    res.redirect(`${config.PUBLIC_ORIGIN}/#/customize?purchase=success`);
   }),
 );
