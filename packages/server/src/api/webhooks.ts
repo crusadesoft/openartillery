@@ -46,7 +46,24 @@ webhooksRouter.post(
   "/xsolla",
   asyncHandler(async (req, res) => {
     const raw = (req.body as Buffer | undefined)?.toString("utf8") ?? "";
-    if (!verifyXsollaSignature(raw, req.header("authorization"))) {
+    const authHeader = req.header("authorization");
+    if (!verifyXsollaSignature(raw, authHeader)) {
+      // TEMP DEBUG: log signature mismatch details (dropped after diagnose).
+      const { config } = await import("../config.js");
+      const crypto = await import("crypto");
+      const secret = config.XSOLLA_WEBHOOK_SECRET ?? "";
+      const expected = crypto
+        .createHash("sha1")
+        .update(raw + secret)
+        .digest("hex");
+      logger.warn({
+        authHeader,
+        bodyLen: raw.length,
+        bodyHead: raw.slice(0, 200),
+        bodyTail: raw.slice(-50),
+        computedSig: expected,
+        secretLen: secret.length,
+      }, "xsolla webhook signature failed");
       xsollaError(res, "INVALID_SIGNATURE", "Invalid signature");
       return;
     }
