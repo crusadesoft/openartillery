@@ -109,8 +109,23 @@ export function verifyXsollaSignature(rawBody: string, header: string | undefine
 
 export interface XsollaWebhookBody {
   notification_type?: string;
-  user?: { id?: string };
+  user?: {
+    /** Legacy `payment` notification field. */
+    id?: string;
+    /** Catalog `order_paid` notification field. */
+    external_id?: string;
+  };
+  /** Legacy `payment`. */
   transaction?: { id?: number; external_id?: string; payment_date?: string };
+  /** Catalog `order_paid`. */
+  billing?: {
+    transaction?: { id?: number; external_id?: string; payment_date?: string };
+  };
+  /** Catalog `order_paid`. */
+  items?: Array<{ sku?: string; type?: string; quantity?: number; amount?: string | number }>;
+  /** Catalog `order_paid`. */
+  order?: { id?: number; status?: string };
+  /** Legacy `payment`. */
   purchase?: { checkout?: { amount?: number; currency?: string } };
   custom_parameters?: { sku?: string };
 }

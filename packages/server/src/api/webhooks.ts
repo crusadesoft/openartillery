@@ -68,20 +68,28 @@ webhooksRouter.post(
       return;
     }
 
-    if (body.notification_type !== "payment") {
-      // Other notification types (refund, etc.) — ack so Xsolla doesn't
-      // retry, but no work to do.
+    // The In-Game Store catalog flow fires `order_paid` for completed
+    // purchases (with full item list + billing). The legacy Pay Station
+    // `payment` notification carries the same intent in a different shape;
+    // we accept both so the integration survives an Xsolla migration.
+    const isPaid =
+      body.notification_type === "order_paid" ||
+      body.notification_type === "payment";
+    if (!isPaid) {
+      // refund, dispute, etc. — ack to prevent retries.
       res.status(200).json({ status: "ok" });
       return;
     }
 
-    const userId = body.user?.id;
-    const sku = body.custom_parameters?.sku;
+    const userId = body.user?.external_id ?? body.user?.id;
+    const sku =
+      body.items?.[0]?.sku ??
+      body.custom_parameters?.sku;
+    const tx = body.billing?.transaction ?? body.transaction;
     const externalId =
-      body.transaction?.external_id ??
-      (body.transaction?.id != null ? String(body.transaction.id) : "");
+      tx?.external_id ?? (tx?.id != null ? String(tx.id) : "");
     if (!userId) {
-      xsollaError(res, "INVALID_USER", "Missing user.id");
+      xsollaError(res, "INVALID_USER", "Missing user.external_id");
       return;
     }
     if (!sku || !isTankSku(sku) || !isPaidTankSku(sku)) {
@@ -93,6 +101,14 @@ webhooksRouter.post(
       return;
     }
 
+    const amountCents = Math.round(
+      Number(
+        body.items?.[0]?.amount ??
+          body.purchase?.checkout?.amount ??
+          0,
+      ) * 100,
+    );
+
     // Idempotency: insert the purchase event keyed on (provider, externalId).
     // Conflict means we already processed this notification, so skip the grant.
     const inserted = await db
@@ -102,7 +118,7 @@ webhooksRouter.post(
         externalId,
         userId,
         sku,
-        amountCents: Math.round((body.purchase?.checkout?.amount ?? 0) * 100),
+        amountCents,
         currency: body.purchase?.checkout?.currency ?? "USD",
         rawPayload: body as unknown as Record<string, unknown>,
       })
