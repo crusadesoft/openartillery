@@ -48,12 +48,15 @@ export async function createCheckout(
       currency: "USD",
       return_url: `${config.PUBLIC_ORIGIN}/#/customize?purchase=success`,
     },
+    // Reference the catalog item by SKU so Pay Station can render the
+    // cart properly. The matching item must exist in
+    // Publisher Account → Items catalog → Virtual items with the same
+    // SKU and a USD price configured. Pay Station ignores any amount we
+    // pass here; it pulls price from the catalog entry.
     purchase: {
-      checkout: {
-        currency: "USD",
-        amount: tank.priceCents / 100,
+      virtual_items: {
+        items: [{ sku, amount: 1 }],
       },
-      description: { value: tank.label },
     },
     custom_parameters: { sku },
   };
