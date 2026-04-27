@@ -36,27 +36,26 @@ export async function createCheckout(
   }
 
   const externalId = crypto.randomBytes(16).toString("hex");
+  // The In-Game Store catalog endpoint expects items keyed by SKU + quantity.
+  // Pay Station then renders the cart from the catalog entries — using the
+  // legacy `/merchant/v2/.../token` endpoint with `purchase.virtual_items`
+  // creates a token but Pay Station can't surface the items.
   const body = {
     user: {
       id: { value: userId },
       name: { value: username },
+      country: { value: "US", allow_modify: true },
     },
+    // The v3 admin endpoint already takes project_id in the URL and rejects
+    // it in the body. Sandbox vs live mode is inferred from the project's
+    // current state in Publisher Account, not a per-token flag.
     settings: {
-      project_id: Number(config.XSOLLA_PROJECT_ID),
       external_id: externalId,
-      mode: config.XSOLLA_SANDBOX ? "sandbox" : undefined,
       currency: "USD",
       return_url: `${config.PUBLIC_ORIGIN}/#/customize?purchase=success`,
     },
-    // Reference the catalog item by SKU so Pay Station can render the
-    // cart properly. The matching item must exist in
-    // Publisher Account → Items catalog → Virtual items with the same
-    // SKU and a USD price configured. Pay Station ignores any amount we
-    // pass here; it pulls price from the catalog entry.
     purchase: {
-      virtual_items: {
-        items: [{ sku, amount: 1 }],
-      },
+      items: [{ sku, quantity: 1 }],
     },
     custom_parameters: { sku },
   };
@@ -66,7 +65,7 @@ export async function createCheckout(
   ).toString("base64");
 
   const res = await fetch(
-    `https://api.xsolla.com/merchant/v2/merchants/${config.XSOLLA_MERCHANT_ID}/token`,
+    `https://store.xsolla.com/api/v3/project/${config.XSOLLA_PROJECT_ID}/admin/payment/token`,
     {
       method: "POST",
       headers: {
@@ -77,9 +76,10 @@ export async function createCheckout(
     },
   );
   if (!res.ok) {
-    throw new Error(`xsolla token request failed: ${res.status}`);
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`xsolla token request failed: ${res.status} ${errBody.slice(0, 200)}`);
   }
-  const json = (await res.json()) as { token?: string };
+  const json = (await res.json()) as { token?: string; order_id?: number };
   if (!json.token) throw new Error("xsolla token missing");
   const base = config.XSOLLA_SANDBOX
     ? "https://sandbox-secure.xsolla.com/paystation4/"
