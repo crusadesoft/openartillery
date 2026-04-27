@@ -248,13 +248,6 @@ apiRouter.post(
       const session = await createCheckout(auth.userId, auth.username, sku);
       res.json({ url: session.url });
     } catch (err) {
-      // Surface the underlying Xsolla error to logs so we can diagnose
-      // 503s that would otherwise just say "failed with status code 503".
-      const { logger } = await import("../logger.js");
-      logger.error(
-        { err, userId: auth.userId, username: auth.username, sku },
-        "xsolla checkout failed",
-      );
       throw new HttpError(
         503,
         err instanceof Error ? err.message : "checkout failed",
