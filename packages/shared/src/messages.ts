@@ -57,7 +57,7 @@ export type ServerEvent =
   | { type: "death"; tankId: string }
   | { type: "turn"; tankId: string; endsAt: number; turnNumber: number }
   | { type: "gameOver"; winnerId: string | null }
-  | { type: "chat"; name: string; text: string; at: number }
+  | { type: "chat"; name: string; text: string; at: number; color?: number }
   | {
       type: "item";
       tankId: string;

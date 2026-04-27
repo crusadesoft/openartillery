@@ -41,23 +41,29 @@ export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Eleme
     }
     return (
       <div className="match-end">
-        <div className="panel">
-          <h1>{headline}</h1>
-          <p className="winner-line">
-            {winnerTeamNum > 0
-              ? "Last team standing."
-              : "Every team wiped on the same shot."}
-          </p>
-          {teams.map(({ team, roster }) => (
-            <TeamTable
-              key={team}
-              label={teamLabel(team)}
-              tint={teamTint(team)}
-              players={roster}
-              winning={winnerTeamNum === team}
-            />
-          ))}
-          <p className="winner-line" style={{ marginTop: 16 }}>{tail}</p>
+        <div className="after-action" data-tab="After-Action">
+          <span className="paper-paperclip" aria-hidden="true" />
+          <div className="report-page">
+            <span className={`report-stamp ${winnerTeamNum > 0 ? "" : "draw"}`}>
+              {winnerTeamNum > 0 ? "Final" : "Inconclusive"}
+            </span>
+            <h1>{headline}</h1>
+            <p className="winner-line">
+              {winnerTeamNum > 0
+                ? "Last team standing."
+                : "Every team wiped on the same shot."}
+            </p>
+            {teams.map(({ team, roster }) => (
+              <TeamTable
+                key={team}
+                label={teamLabel(team)}
+                tint={teamTint(team)}
+                players={roster}
+                winning={winnerTeamNum === team}
+              />
+            ))}
+            <p className="report-foot">{tail}</p>
+          </div>
         </div>
       </div>
     );
@@ -65,46 +71,48 @@ export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Eleme
 
   return (
     <div className="match-end">
-      <div className="panel">
-        <h1>{winner ? `${winner.name} wins` : "Stalemate"}</h1>
-        <p className="winner-line">
-          {winner
-            ? `${winner.kills} kill${winner.kills === 1 ? "" : "s"} · ${Math.round(winner.damageDealt)} dmg dealt`
-            : "No last tank standing."}
-        </p>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Player</th>
-              <th>Kills</th>
-              <th>Damage</th>
-              <th>Shots</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((p, i) => (
-              <tr
-                key={p.id}
-                className={winner && p.id === winner.id ? "winner" : ""}
-              >
-                <td>{i + 1}</td>
-                <td>
-                  {p.name}
-                  {p.bot ? (
-                    <span style={{ color: "var(--ink-faint)" }}> · bot</span>
-                  ) : (
-                    ""
-                  )}
-                </td>
-                <td>{p.kills}</td>
-                <td>{Math.round(p.damageDealt)}</td>
-                <td>{p.shotsFired}</td>
+      <div className="after-action" data-tab="After-Action">
+        <span className="paper-paperclip" aria-hidden="true" />
+        <div className="report-page">
+          <span className={`report-stamp ${winner ? "" : "draw"}`}>
+            {winner ? "Final" : "Inconclusive"}
+          </span>
+          <h1>{winner ? `${winner.name} wins` : "Stalemate"}</h1>
+          <p className="winner-line">
+            {winner
+              ? `${winner.kills} kill${winner.kills === 1 ? "" : "s"} · ${Math.round(winner.damageDealt)} dmg dealt`
+              : "No last tank standing."}
+          </p>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Player</th>
+                <th>Kills</th>
+                <th>Damage</th>
+                <th>Shots</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="winner-line" style={{ marginTop: 16 }}>{tail}</p>
+            </thead>
+            <tbody>
+              {sorted.map((p, i) => (
+                <tr
+                  key={p.id}
+                  className={winner && p.id === winner.id ? "winner" : ""}
+                >
+                  <td>{i + 1}</td>
+                  <td>
+                    {p.name}
+                    {p.bot ? <span className="report-bot"> · bot</span> : ""}
+                  </td>
+                  <td>{p.kills}</td>
+                  <td>{Math.round(p.damageDealt)}</td>
+                  <td>{p.shotsFired}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <p className="report-foot">{tail}</p>
+        </div>
       </div>
     </div>
   );
@@ -121,18 +129,14 @@ function TeamTable({ label, tint, players, winning }: TeamTableProps): JSX.Eleme
   const totalKills = players.reduce((n, p) => n + p.kills, 0);
   const totalDmg = players.reduce((n, p) => n + p.damageDealt, 0);
   return (
-    <div style={{ marginTop: 14 }}>
+    <div className="report-team">
       <div
-        style={{
-          color: tint,
-          fontFamily: "var(--font-mono)",
-          fontSize: 12,
-          letterSpacing: "0.18em",
-          marginBottom: 6,
-          textTransform: "uppercase",
-        }}
+        className={`report-team-head ${winning ? "winning" : ""}`}
+        style={{ borderBottomColor: tint }}
       >
-        {label} · {players.length} {winning ? "· WINNERS" : ""}
+        <span style={{ color: tint }}>{label}</span>
+        <span className="report-team-count"> · {players.length}</span>
+        {winning && <span className="report-team-flag"> · Winners</span>}
       </div>
       <table className="table">
         <thead>
@@ -148,18 +152,14 @@ function TeamTable({ label, tint, players, winning }: TeamTableProps): JSX.Eleme
             <tr key={p.id} className={winning ? "winner" : ""}>
               <td>
                 {p.name}
-                {p.bot ? (
-                  <span style={{ color: "var(--ink-faint)" }}> · bot</span>
-                ) : (
-                  ""
-                )}
+                {p.bot ? <span className="report-bot"> · bot</span> : ""}
               </td>
               <td>{p.kills}</td>
               <td>{Math.round(p.damageDealt)}</td>
               <td>{p.shotsFired}</td>
             </tr>
           ))}
-          <tr style={{ opacity: 0.7 }}>
+          <tr className="report-team-total">
             <td><strong>Team total</strong></td>
             <td>{totalKills}</td>
             <td>{Math.round(totalDmg)}</td>

@@ -1,15 +1,10 @@
 /* Stylesheet manifest. Order matters: tokens → base → components → pages,
-   with theme overrides last so their [data-theme="..."] selectors win. */
+   with diegetic loaded between components and pages so per-scene rules
+   can still override the kit. */
 @import "./tokens.css";
 @import "./semantic.css";
 @import "./base.css";
 @import "./typography.css";
-@import "./backdrop.css";
-@import "./theme-picker.css";
 @import "./components.css";
+@import "./diegetic.css";
 @import "./pages.css";
-
-@import "./themes/desert.css";
-@import "./themes/arctic.css";
-@import "./themes/dusk.css";
-@import "./themes/jungle.css";

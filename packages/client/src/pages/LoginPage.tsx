@@ -32,9 +32,15 @@ export function LoginPage({ navigate }: Props): JSX.Element {
   };
 
   return (
-    <div className="container">
-      <form className="card" style={{ maxWidth: 420, margin: "40px auto" }} onSubmit={submit}>
-        <h2>Sign in</h2>
+    <div className="container enlistment-page">
+      <form className="scene-enlistment" onSubmit={submit}>
+        <span className="paperclip" aria-hidden />
+        <span className="form-stamp"><span className="stamp">Reissue</span></span>
+        <div className="form-header">
+          <span className="dossier-tab">Authorization · Returning Operator</span>
+        </div>
+        <h1 className="form-title">Sign in</h1>
+        <p className="form-tagline">Present credentials to resume command access.</p>
         {error && <div className="error">{error}</div>}
         <div className="field">
           <label>Username</label>
@@ -61,7 +67,7 @@ export function LoginPage({ navigate }: Props): JSX.Element {
         </SfxButton>
         <SfxButton
           type="button"
-          className="ghost-btn"
+          className="ghost-btn form-link"
           onClick={() => navigate({ name: "register" })}
         >
           Need an account? Register

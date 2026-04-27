@@ -159,10 +159,13 @@ export function LeaderboardPage({ navigate }: Props): JSX.Element {
   }, []);
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Top Brass</h2>
-        <p style={{ color: "var(--ink-dim)", fontSize: 12, margin: "0 0 14px", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+    <div className="container leaderboard-page">
+      <div className="club-header">
+        <span className="brass-plate club-marquee">Officer's Club · Hall of Plaques</span>
+      </div>
+      <div className="scene-officers-club">
+        <h2 className="club-title">Top Brass</h2>
+        <p className="club-tagline">
           Only the most feared operators on the network.
         </p>
         {error && <div className="error">{error}</div>}

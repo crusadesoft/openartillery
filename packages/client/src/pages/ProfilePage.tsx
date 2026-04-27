@@ -63,128 +63,114 @@ export function ProfilePage({ username, navigate }: Props): JSX.Element {
 
   if (!username) {
     return (
-      <div className="container">
-        <div className="card">
-          <h2>No profile selected</h2>
-          <button className="secondary-btn" onClick={() => navigate({ name: "leaderboard" })}>
-            Browse leaderboard
-          </button>
+      <div className="profile-desk">
+        <div className="folder">
+          <div className="folder-tab">No file</div>
+          <div className="folder-section">
+            <h2 className="folder-section-title">§ NO PROFILE SELECTED</h2>
+            <button className="paper-btn" onClick={() => navigate({ name: "leaderboard" })}>
+              Browse leaderboard
+            </button>
+          </div>
         </div>
       </div>
     );
   }
 
-  if (error) return <div className="container"><div className="card"><div className="error">{error}</div></div></div>;
-  if (!profile) return <div className="container"><div className="card"><p style={{ color: "var(--ink-dim)" }}>Loading service record…</p></div></div>;
+  if (error) return <div className="profile-desk"><div className="folder"><div className="folder-section"><div className="error">{error}</div></div></div></div>;
+  if (!profile) return <div className="profile-desk"><div className="folder"><div className="folder-section"><p style={{ color: "var(--paper-ink-dim)" }}>Loading service record…</p></div></div></div>;
 
   const rank = rankFor(profile.mmr);
   const toNext = Math.max(0, rank.next - profile.mmr);
-  const progress = Math.max(0, Math.min(1, (profile.mmr - rank.min) / Math.max(1, rank.next - rank.min)));
   const totalGames = profile.wins + profile.losses;
   const winRate = totalGames > 0 ? profile.wins / totalGames : 0;
   const kd = profile.deaths > 0 ? profile.kills / profile.deaths : profile.kills;
   const medals = medalsFor(profile);
 
   return (
-    <div className="container">
-      <div className="card service-record">
-        <div className="service-record-head">
-          <div className="dogtag">
-            <span className="service-label">Service Record · SN-{profile.id.slice(0, 8).toUpperCase()}</span>
-            <h1 className="codename">{profile.username}</h1>
-            <div className="rank-row">
-              <span className="rank-chip" style={{ borderColor: rank.color, color: rank.color }}>
-                <span
-                  className="rank-icon icon-mask"
-                  style={{
-                    background: rank.color,
-                    WebkitMaskImage: `url(${rank.icon})`,
-                    maskImage: `url(${rank.icon})`,
-                  }}
-                />
-                {rank.name}
-              </span>
-              <span className="rank-mmr">{profile.mmr} <span className="rank-mmr-lbl">MMR</span></span>
-            </div>
-            <div className="rank-progress">
-              <div className="rank-progress-bar">
-                <div style={{ width: `${progress * 100}%`, background: rank.color }} />
-              </div>
-              <div className="rank-progress-labels">
-                <span>{rank.name}</span>
-                <span>{toNext > 0 ? `${toNext} MMR → ${RANKS[Math.min(RANKS.length - 1, RANKS.indexOf(rank) + 1)]!.name}` : "MAX RANK"}</span>
-              </div>
+    <div className="profile-desk">
+      <div className="folder">
+        <div className="folder-left">
+          <div className="folder-tab">{profile.username}</div>
+          <div className="folder-casenumber">
+            F-{caseNumberFor(profile.id)}
+          </div>
+          <div className="folder-photo">
+            <span className="folder-tape" aria-hidden />
+            <div className="folder-photo-frame">
+              {isSelf ? <SelfVehicleCard /> : <OperatorVehicleCard username={profile.username} />}
             </div>
           </div>
-          <div className="dogtag-stamp">
-            ENLISTED · {new Date(profile.createdAt).getFullYear()}
-            {isDemo && <><br /><span style={{ color: "var(--theme-accent-bright)", fontSize: 10 }}>DEMO OPERATOR</span></>}
-          </div>
-        </div>
-      </div>
 
-      <div className="card">
-        <h2>{isSelf ? "My Vehicle" : `${profile.username}'s Vehicle`}</h2>
-        {isSelf
-          ? <SelfVehicleCard />
-          : <OperatorVehicleCard username={profile.username} />}
-        {isSelf && (
-          <div style={{ marginTop: 10 }}>
-            <button
-              className="secondary-btn"
-              onClick={() => navigate({ name: "customize" })}
-              style={{ width: "auto", padding: "10px 20px" }}
-            >
-              Edit loadout
-            </button>
-          </div>
-        )}
-      </div>
-
-      <div className="card">
-        <h2>Combat Record</h2>
-        <div className="combat-grid">
-          <CombatTile big label="Matches" value={profile.matches} />
-          <CombatTile big label="Win Rate" value={`${Math.round(winRate * 100)}%`} accent={winRate >= 0.5 ? "ok" : "warn"} />
-          <CombatTile big label="Kills" value={profile.kills} accent="amber" />
-          <CombatTile big label="K / D" value={kd.toFixed(2)} accent={kd >= 1 ? "ok" : "bad"} />
-          <CombatTile label="Wins" value={profile.wins} />
-          <CombatTile label="Losses" value={profile.losses} />
-          <CombatTile label="Deaths" value={profile.deaths} />
-          <CombatTile label="Enlisted" value={new Date(profile.createdAt).toLocaleDateString()} />
-        </div>
-      </div>
-
-      <div className="card">
-        <h2>Commendations</h2>
-        <div className="medal-grid">
-          {medals.map((m) => (
-            <div key={m.id} className={`medal ${m.earned ? "earned" : "locked"}`}>
-              <div className="medal-icon">
+          <div className="taped-ribbons">
+            {medals.filter((m) => m.earned).map((m, i) => (
+              <div
+                key={m.id}
+                className="taped-ribbon"
+                style={{ transform: `rotate(${(i * 137) % 7 - 3}deg)` }}
+                title={`${m.name} — ${m.blurb}`}
+              >
+                <span className="taped-ribbon-tape" aria-hidden />
                 <span
-                  className="icon-mask"
+                  className="taped-ribbon-icon icon-mask"
                   style={{
-                    width: 32, height: 32,
-                    background: m.earned ? "var(--theme-accent-bright)" : "var(--ash)",
+                    background: "var(--brass-bright)",
                     WebkitMaskImage: `url(${m.iconUrl})`,
                     maskImage: `url(${m.iconUrl})`,
-                    WebkitMaskSize: "contain",
-                    maskSize: "contain",
-                    WebkitMaskRepeat: "no-repeat",
-                    maskRepeat: "no-repeat",
-                    WebkitMaskPosition: "center",
-                    maskPosition: "center",
-                    display: "inline-block",
                   }}
                 />
+                <span className="taped-ribbon-name">{m.name}</span>
               </div>
-              <div className="medal-body">
-                <div className="medal-name">{m.name}</div>
-                <div className="medal-blurb">{m.blurb}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className="folder-right">
+          <div className="paper-sheet">
+            <span className="paper-paperclip" aria-hidden />
+            <div className="folder-stamp">{isDemo ? "DEMO" : "CLASSIFIED"}</div>
+
+            <div className="folder-section folder-header">
+              <div className="folder-letterhead">
+                <div className="letterhead-line">SERVICE RECORD · SN-{profile.id.slice(0, 8).toUpperCase()}</div>
+                <h1 className="letterhead-name">{profile.username}</h1>
+                <div className="letterhead-rank">
+                  <span className="rank-chip" style={{ borderColor: rank.color, color: rank.color }}>
+                    <span
+                      className="rank-icon icon-mask"
+                      style={{
+                        background: rank.color,
+                        WebkitMaskImage: `url(${rank.icon})`,
+                        maskImage: `url(${rank.icon})`,
+                      }}
+                    />
+                    {rank.name}
+                  </span>
+                  <span className="rank-mmr">{profile.mmr}<span className="rank-mmr-lbl">MMR</span></span>
+                </div>
+                <div className="rank-status">
+                  {toNext > 0
+                    ? `Status — ${toNext} MMR to ${RANKS[Math.min(RANKS.length - 1, RANKS.indexOf(rank) + 1)]!.name}`
+                    : "Status — at max rank"}
+                </div>
               </div>
-              <div className="medal-status">{m.earned ? "AWARDED" : "LOCKED"}</div>
             </div>
-          ))}
+
+            <div className="folder-section">
+              <div className="folder-section-title">§ COMBAT RECORD</div>
+              <div className="combat-grid">
+                <CombatTile big label="Matches" value={profile.matches} />
+                <CombatTile big label="Win Rate" value={`${Math.round(winRate * 100)}%`} accent={winRate >= 0.5 ? "ok" : "warn"} />
+                <CombatTile big label="Kills" value={profile.kills} accent="amber" />
+                <CombatTile big label="K / D" value={kd.toFixed(2)} accent={kd >= 1 ? "ok" : "bad"} />
+                <CombatTile label="Wins" value={profile.wins} />
+                <CombatTile label="Losses" value={profile.losses} />
+                <CombatTile label="Deaths" value={profile.deaths} />
+                <CombatTile label="Enlisted" value={new Date(profile.createdAt).toLocaleDateString()} />
+              </div>
+            </div>
+
+          </div>
         </div>
       </div>
     </div>
@@ -243,6 +229,13 @@ function opHash(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
   return Math.abs(h);
+}
+
+function caseNumberFor(id: string): string {
+  const h = opHash(id);
+  const year = 2024 + (h % 3);
+  const seq = ((h >> 5) % 9000) + 1000;
+  return `${year}-${seq}`;
 }
 
 const OP_PATTERNS = [

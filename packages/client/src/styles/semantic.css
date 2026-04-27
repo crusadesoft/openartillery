@@ -25,30 +25,6 @@
   --medal-locked-bottom: #121212;
   --medal-locked-text:   #555;
 
-  /* ─── Semantic button variants ───
-     .go-btn (affirmative, olive), .danger-btn (destructive, red),
-     .steel-btn (info/neutral, steel-blue). Do not theme — users learn
-     these colors as affordances. */
-  --btn-go-fill:     #56612a;
-  --btn-go-border:   #1e2710;
-  --btn-go-color:    #e9f0c9;
-  --btn-go-gradient: linear-gradient(180deg, rgba(140, 170, 70, 0.5), rgba(40, 52, 16, 0.88));
-  --btn-go-shadow:   rgba(60, 90, 25, 0.4);
-
-  --btn-danger-fill:     #8a2020;
-  --btn-danger-border:   #3b0808;
-  --btn-danger-color:    #ffd9d9;
-  --btn-danger-gradient: linear-gradient(180deg, rgba(200, 60, 50, 0.55), rgba(60, 8, 8, 0.9));
-  --btn-danger-shadow:   rgba(150, 30, 30, 0.4);
-
-  --btn-steel-fill:     #243244;
-  --btn-steel-border:   #0d1621;
-  --btn-steel-color:    #c7d6e6;
-  --btn-steel-gradient: linear-gradient(180deg, rgba(110, 150, 190, 0.3), rgba(14, 22, 32, 0.88));
-
-  --btn-secondary-fill:     #2e3440;
-  --btn-secondary-gradient: linear-gradient(180deg, rgba(100, 110, 120, 0.35), rgba(20, 24, 30, 0.85));
-
   /* ─── Battle HUD (rust-military aesthetic, constant across all menu themes) ───
      Fire button dome, weapon tray frame, pause menu, etc. */
   --battle-accent:        #b14f24;   /* same as --rust */

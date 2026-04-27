@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   DEFAULT_LOADOUT_SPEC,
   DEFAULT_LOADOUT,
@@ -8,109 +8,214 @@ import {
 import type { Route } from "../router";
 import { WeaponIcon } from "../ui/WeaponIcon";
 import { drawTankPreview } from "../game/tankPreview";
+import { click as sfxClick } from "../ui/sfx";
 
 interface Props { navigate: (r: Route) => void; }
 
+const CHANNELS: WeaponId[] = DEFAULT_LOADOUT;
+
 /**
- * Arsenal — a full reference list of every weapon, its icon, projectile
- * art, stats, and a continuously-looping firing-arc preview. The preview
- * runs a tiny simulation that mirrors the server's behaviour: projectile
- * gravity, bounces, cluster splits, MIRV splits, airstrike fall-in,
- * napalm fire tiles, and dirt-mound additions, plus a multi-stage
- * explosion (flash → fireball → shockwave ring → sparks → debris →
- * smoke pillar) tuned to the weapon's real blast radius.
+ * Arsenal — a CRT TV in the quartermaster's briefing room. Each weapon
+ * is a channel; the TV plays a continuously-looping firing-arc preview
+ * (same simulation as battle: gravity, bounces, splits, blast). A
+ * printed TV Guide on the right lists every channel with mini-stats so
+ * you can scan and jump. Channel changes briefly cut to static.
  */
-export function ArsenalPage({ navigate }: Props): JSX.Element {
-  return (
-    <div className="container">
-      <div className="card">
-        <h2>Arsenal</h2>
-        <p
-          style={{
-            color: "var(--ink-dim)",
-            fontSize: 12,
-            margin: "0 0 18px",
-            letterSpacing: "0.1em",
-            textTransform: "uppercase",
-          }}
-        >
-          Every round you can bring to the field. Previews loop live — same
-          gravity, bounces, splits, and blast behaviour as battle.
-        </p>
-
-        <div className="arsenal-grid">
-          {DEFAULT_LOADOUT.map((id) => (
-            <WeaponCard key={id} weapon={id} />
-          ))}
-        </div>
-
-        <div style={{ marginTop: 20 }}>
-          <button className="ghost-btn" onClick={() => navigate({ name: "home" })}>
-            ← Back
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function WeaponCard({ weapon }: { weapon: WeaponId }): JSX.Element {
+export function ArsenalPage(_props: Props): JSX.Element {
+  const [idx, setIdx] = useState(0);
+  const [staticOn, setStaticOn] = useState(false);
+  const [tvOn, setTvOn] = useState(true);
+  const [irOn, setIrOn] = useState(false);
+  const irTimer = useRef<number | null>(null);
+  const weapon = CHANNELS[idx]!;
   const def = WEAPONS[weapon];
   const color = `#${def.tint.toString(16).padStart(6, "0")}`;
-  const ammoLabel = def.maxAmmo === undefined ? "∞" : String(def.maxAmmo);
+  const channelStr = String(idx + 1).padStart(2, "0");
+
+  const pulseIr = () => {
+    setIrOn(true);
+    if (irTimer.current !== null) window.clearTimeout(irTimer.current);
+    irTimer.current = window.setTimeout(() => setIrOn(false), 160);
+  };
+
+  const flickTo = (next: number) => {
+    pulseIr();
+    if (!tvOn) return;
+    if (next === idx) return;
+    sfxClick();
+    setStaticOn(true);
+    setIdx(((next % CHANNELS.length) + CHANNELS.length) % CHANNELS.length);
+    setTimeout(() => setStaticOn(false), 240);
+  };
+
+  const channelUp = () => flickTo(idx + 1);
+  const channelDown = () => flickTo(idx - 1);
+  const togglePower = () => {
+    pulseIr();
+    sfxClick();
+    setTvOn((p) => {
+      const next = !p;
+      if (next) {
+        setStaticOn(true);
+        setTimeout(() => setStaticOn(false), 280);
+      } else {
+        setStaticOn(false);
+      }
+      return next;
+    });
+  };
+  const bumpVol = () => {
+    pulseIr();
+    sfxClick();
+  };
 
   return (
-    <div className="arsenal-card">
-      <div className="arsenal-head">
-        <span
-          className="arsenal-glyph"
-          style={{ border: `1px solid ${color}`, color }}
-        >
-          <WeaponIcon weapon={weapon} size={32} color={color} />
-        </span>
-        <div className="arsenal-identity">
-          <div className="arsenal-name" style={{ color }}>{def.name}</div>
-          <div className="arsenal-blurb">{def.blurb}</div>
-        </div>
-        <div className="arsenal-ammo">
-          <div className="arsenal-ammo-num">{ammoLabel}</div>
-          <div className="arsenal-ammo-lbl">rounds</div>
-        </div>
-      </div>
+    <div className="briefing-room">
+      <div className="briefing-grid">
+        <section className="av-cart" aria-label="Weapon broadcast">
+          <div className="av-cart-tv">
+          <div className="wall-tv-case">
+            <div className="wall-tv-side wall-tv-side-l" aria-hidden />
+            <div className="wall-tv-side wall-tv-side-r" aria-hidden />
+            <div className="wall-tv-top" aria-hidden>
+              <span className="wall-tv-vent" />
+              <span className="wall-tv-vent" />
+              <span className="wall-tv-vent" />
+            </div>
 
-      <WeaponPreview weapon={weapon} />
+            <div className="wall-tv-bezel">
+              <div className="wall-tv-screen-mount">
+              <div className={`crt-screen ${staticOn ? "tuning" : ""} ${tvOn ? "" : "off"}`}>
+                {tvOn && (
+                  <>
+                    <div className="crt-channel-tag">CH {channelStr}</div>
+                    <div className="crt-on-air" aria-hidden>● REC</div>
+                    <WeaponPreview weapon={weapon} />
+                    <div className="crt-hud">
+                      <div className="crt-hud-name" style={{ color }}>{def.name}</div>
+                      <div className="crt-hud-stats">
+                        <span className="crt-hud-stat">
+                          <span className="crt-hud-lbl">DMG</span>
+                          <span className="crt-hud-val">{def.damage}</span>
+                        </span>
+                        <span className="crt-hud-stat">
+                          <span className="crt-hud-lbl">RAD</span>
+                          <span className="crt-hud-val">{def.radius}</span>
+                        </span>
+                        <span className="crt-hud-stat">
+                          <span className="crt-hud-lbl">DIG</span>
+                          <span className="crt-hud-val">{Math.round(def.digFactor * 100)}%</span>
+                        </span>
+                      </div>
+                    </div>
+                  </>
+                )}
+                <div className="crt-scanlines" aria-hidden />
+                <div className="crt-vignette" aria-hidden />
+                <div className="crt-static" aria-hidden />
+                <div className="crt-glare" aria-hidden />
+                {!tvOn && <div className="crt-off-dot" aria-hidden />}
+              </div>
+              </div>
+              <div className="wall-tv-chin">
+                <span className={`wall-tv-led ${tvOn ? "on" : ""}`} aria-hidden />
+                <span className="wall-tv-brand">QUARTERMASTER · QM-2400</span>
+                <span className="wall-tv-speaker" aria-hidden />
+              </div>
+            </div>
+          </div>
+          </div>
 
-      <div className="arsenal-stats">
-        <Stat label="Damage" value={`${def.damage}`} accent={color} />
-        <Stat label="Radius" value={`${def.radius}`} />
-        <Stat label="Dig" value={`${Math.round(def.digFactor * 100)}%`} />
-        {def.bounces !== undefined && (
-          <Stat label="Bounces" value={`${def.bounces}`} />
-        )}
-        {def.cluster && <Stat label="Bomblets" value={`${def.cluster.count}`} />}
-        {def.airstrike && <Stat label="Strikes" value={`${def.airstrike.count}`} />}
-        {def.mirv && <Stat label="Warheads" value={`${def.mirv.count}`} />}
-        {def.napalm && (
-          <Stat
-            label="Burn"
-            value={`${def.napalm.durationSec}s · ${def.napalm.radius}r`}
-          />
-        )}
-        {def.addsTerrain && <Stat label="Builds" value="Terrain+" />}
-      </div>
-    </div>
-  );
-}
+          <div className="av-cart-frame" aria-hidden>
+            <div className="av-cart-rail av-cart-rail-l" />
+            <div className="av-cart-rail av-cart-rail-r" />
+            <div className="av-cart-shelf av-cart-shelf-top" />
+            <div className="av-cart-shelf av-cart-shelf-mid">
+              <span className="av-cart-vcr">
+                <span className="av-cart-vcr-slot" />
+                <span className="av-cart-vcr-led" />
+                <span className="av-cart-vcr-led on" />
+              </span>
+            </div>
+            <div className="av-cart-shelf av-cart-shelf-bot" />
+          </div>
+          <div className="av-cart-wheels" aria-hidden>
+            <span className="av-cart-wheel" />
+            <span className="av-cart-wheel" />
+          </div>
+        </section>
 
-function Stat({
-  label, value, accent,
-}: { label: string; value: string; accent?: string }) {
-  return (
-    <div className="arsenal-stat">
-      <div className="arsenal-stat-val" style={accent ? { color: accent } : undefined}>
-        {value}
+        <aside className="tv-remote" aria-label="Remote control">
+          <div className="remote-top">
+            <div className="remote-brand">QM REMOTE</div>
+            <button
+              type="button"
+              className="remote-btn remote-power"
+              onClick={togglePower}
+              aria-label={tvOn ? "Power off" : "Power on"}
+              title={tvOn ? "Power off" : "Power on"}
+            >
+              <span className="remote-power-dot" />
+            </button>
+          </div>
+
+          <div className="remote-rocker remote-rocker-ch">
+            <button
+              type="button"
+              className="remote-btn remote-btn-up"
+              onClick={channelUp}
+              aria-label="Channel up"
+              title="Channel up"
+            >
+              <span className="remote-arrow">▲</span>
+              <span className="remote-key-lbl">CH</span>
+            </button>
+            <button
+              type="button"
+              className="remote-btn remote-btn-down"
+              onClick={channelDown}
+              aria-label="Channel down"
+              title="Channel down"
+            >
+              <span className="remote-arrow">▼</span>
+              <span className="remote-key-lbl">CH</span>
+            </button>
+          </div>
+
+          <div className="remote-keypad">
+            {CHANNELS.map((id, i) => {
+              const w = WEAPONS[id];
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  className="remote-key"
+                  onClick={() => flickTo(i)}
+                  title={`${w.name} — DMG ${w.damage} · R ${w.radius}`}
+                >
+                  <span className="remote-key-num">{i + 1}</span>
+                  <span className="remote-key-name">{w.name}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="remote-rocker remote-rocker-vol">
+            <button type="button" className="remote-btn" onClick={bumpVol} aria-label="Volume up" title="Volume">
+              <span className="remote-arrow">+</span>
+              <span className="remote-key-lbl">VOL</span>
+            </button>
+            <button type="button" className="remote-btn" onClick={bumpVol} aria-label="Volume down" title="Volume">
+              <span className="remote-arrow">−</span>
+              <span className="remote-key-lbl">VOL</span>
+            </button>
+          </div>
+
+          <div className="remote-foot" aria-hidden>
+            <span className={`remote-ir ${irOn ? "on" : ""}`} />
+          </div>
+        </aside>
       </div>
-      <div className="arsenal-stat-lbl">{label}</div>
     </div>
   );
 }
@@ -121,9 +226,7 @@ interface Proj {
   x: number; y: number;
   vx: number; vy: number;
   bouncesLeft: number;
-  /** true for sub-munitions we spawn — they skip own-type splits. */
   child: boolean;
-  /** Seconds until MIRV splits; undefined = not a MIRV parent. */
   splitAfter?: number;
   age: number;
 }
@@ -139,21 +242,15 @@ interface Particle {
   ringColor?: string;
   lifespan: number;
   age: number;
-  /** Constant world radius per-tile fire patch — for `fire` kind only. */
   persist?: boolean;
-  /** Pre-chosen expiry (ms) for persistent fire so the loop length
-   *  matches the weapon def's duration. */
   expireAt?: number;
 }
 
 interface Mound { x: number; peak: number; w: number; }
 
-/** Scaled-down gravity so the preview reads at 420×150 without requiring
- *  a huge height. Projectile flight feel is preserved proportionally. */
 const G_PREVIEW = 360;
-
-const PREVIEW_W = 420;
-const PREVIEW_H = 160;
+const PREVIEW_W = 600;
+const PREVIEW_H = 320;
 
 function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -171,27 +268,23 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
 
     const def = WEAPONS[weapon];
     const color = `#${def.tint.toString(16).padStart(6, "0")}`;
-    const groundY = PREVIEW_H - 26;
-    const tankX = 48;
+    const groundY = PREVIEW_H - 36;
+    const tankX = 60;
     const tankY = groundY - 8;
     const muzzleX = tankX - 2;
     const muzzleY = tankY - 16;
-    const targetX = PREVIEW_W - 70;
+    const targetX = PREVIEW_W - 80;
 
-    // Scale the weapon's blast radius into our preview coordinates. Real
-    // game radius ranges 35..90 world px; we want ~14..42 preview px.
     const blastR = Math.max(12, Math.min(50, def.radius * 0.45));
 
-    // Sim state.
     let projectiles: Proj[] = [];
     let particles: Particle[] = [];
     let mounds: Mound[] = [];
     let cycleMs = 0;
     let resetAt = 0;
-    let barrelAngle = -Math.PI / 4;  // updated to match initial shot direction
+    let barrelAngle = -Math.PI / 4;
     const CYCLE_LEN = 4400;
 
-    // Helpers —————————————————————————————————————————————————————
     function addSpark(x: number, y: number, speed: number, cTint: string) {
       for (let i = 0; i < 14; i++) {
         const a = Math.random() * Math.PI * 2;
@@ -275,7 +368,7 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
 
     function addFireball(x: number, y: number, r: number, tint: string) {
       particles.push({
-        kind: "spark", // repurpose: we draw this as a radial gradient
+        kind: "spark",
         x, y,
         vx: 0, vy: 0, gravity: 0,
         size: r * 0.3,
@@ -315,7 +408,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       addDebris(p.x, p.y);
       addSmoke(p.x, p.y, 8);
 
-      // Weapon-specific behaviour, matching server rules.
       if (def.addsTerrain) {
         mounds.push({ x: p.x, peak: 10, w: 22 });
       }
@@ -323,7 +415,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         addNapalmTiles(p.x);
       }
       if (def.cluster && !p.child) {
-        // Split into sub-munitions popped upward + outward.
         for (let i = 0; i < def.cluster.count; i++) {
           const a = -Math.PI / 2 + (i - def.cluster.count / 2) * 0.22;
           const s = 150 + Math.random() * 60;
@@ -338,7 +429,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         }
       }
       if (def.airstrike && !p.child) {
-        // Additional vertical rounds falling near impact.
         for (let i = 0; i < def.airstrike.count; i++) {
           const xi = p.x - (def.airstrike.count - 1) * 8 + i * 16;
           projectiles.push({
@@ -353,10 +443,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
     }
 
     function fireInitial() {
-      if (weapon === "airstrike") {
-        // Airstrike in-game is a single primary round that calls in
-        // verticals on detonation — we simulate the primary arc too.
-      }
       const flightSec =
         weapon === "heavy" || weapon === "airstrike" ? 1.45 :
         weapon === "mirv" ? 1.3 :
@@ -365,7 +451,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         weapon === "napalm" ? 1.3 :
         1.2;
       const dx = targetX - muzzleX;
-      // For bouncers, aim a bit short so the bounces carry it the rest.
       const effTarget = (def.bounces ?? 0) > 0
         ? muzzleX + dx * 0.55
         : targetX;
@@ -373,9 +458,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       const effDy = groundY - muzzleY;
       const vx = effDx / flightSec;
       const vy = (effDy - 0.5 * G_PREVIEW * flightSec * flightSec) / flightSec;
-      // Point the mini tank's barrel in the exact direction the round
-      // leaves the muzzle. atan2(vy, vx) is already in canvas-y-down
-      // coords so it matches how Phaser / canvas rotation reads.
       barrelAngle = Math.atan2(vy, vx);
       projectiles.push({
         x: muzzleX,
@@ -386,7 +468,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         age: 0,
         splitAfter: def.mirv?.splitAfterSec,
       });
-      // Muzzle flash.
       addFlash(muzzleX, muzzleY, 10);
       addSpark(muzzleX, muzzleY, 140, color);
     }
@@ -398,14 +479,11 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       fireInitial();
     }
 
-    // Step ————————————————————————————————————————————————————————
     function step(dt: number) {
-      // Projectiles
       for (let i = projectiles.length - 1; i >= 0; i--) {
         const p = projectiles[i];
         p.age += dt;
 
-        // MIRV mid-flight split.
         if (p.splitAfter !== undefined && p.age >= p.splitAfter && def.mirv) {
           for (let j = 0; j < def.mirv.count; j++) {
             const t = (j - (def.mirv.count - 1) / 2) / def.mirv.count;
@@ -428,13 +506,11 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         p.x += p.vx * dt;
         p.y += p.vy * dt;
 
-        // Off-screen cleanup (except airstrike falls from above).
         if (p.x < -40 || p.x > PREVIEW_W + 40) {
           projectiles.splice(i, 1);
           continue;
         }
 
-        // Ground collision, accounting for dirt mounds.
         const gy = groundAt(p.x, mounds, groundY);
         if (p.y >= gy) {
           if (p.bouncesLeft > 0) {
@@ -442,7 +518,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
             p.y = gy - 1;
             p.vy = -p.vy * 0.55;
             p.vx *= 0.78;
-            // Little dust puff on bounce.
             addSpark(p.x, gy, 70, "#8a6a3d");
           } else {
             projectiles.splice(i, 1);
@@ -451,7 +526,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         }
       }
 
-      // Particles
       for (let i = particles.length - 1; i >= 0; i--) {
         const q = particles[i];
         q.age += dt;
@@ -460,7 +534,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
           continue;
         }
         if (q.kind === "ring" || q.kind === "flash" || q.kind === "fire") {
-          // Static-position effects just age out.
           continue;
         }
         q.vy += q.gravity * dt;
@@ -469,7 +542,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       }
     }
 
-    // Draw ————————————————————————————————————————————————————————
     function themeAccentRgb(): string {
       const v = getComputedStyle(document.documentElement)
         .getPropertyValue("--theme-accent-rgb").trim();
@@ -479,14 +551,12 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.clearRect(0, 0, PREVIEW_W, PREVIEW_H);
       const accentRgb = themeAccentRgb();
 
-      // Sky.
       const sky = ctx.createLinearGradient(0, 0, 0, groundY);
       sky.addColorStop(0, "rgba(20, 28, 44, 0.0)");
       sky.addColorStop(1, "rgba(60, 40, 22, 0.48)");
       ctx.fillStyle = sky;
       ctx.fillRect(0, 0, PREVIEW_W, groundY);
 
-      // Ground (with mounds baked in). Tinted per theme via accent-rgb.
       const ground = ctx.createLinearGradient(0, groundY, 0, PREVIEW_H);
       ground.addColorStop(0, `rgba(${accentRgb}, 0.22)`);
       ground.addColorStop(1, "rgba(0, 0, 0, 0.92)");
@@ -502,7 +572,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.closePath();
       ctx.fill();
       ctx.fillStyle = `rgba(${accentRgb}, 0.35)`;
-      // Rim highlight along the mound silhouette.
       ctx.beginPath();
       ctx.moveTo(0, groundY - 0.5);
       for (let x = 0; x <= PREVIEW_W; x += 4) {
@@ -513,14 +582,11 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.strokeStyle = `rgba(${accentRgb}, 0.3)`;
       ctx.stroke();
 
-      // Tank silhouette.
       drawMiniTank(ctx, tankX, tankY, barrelAngle);
-      // Target marker.
       ctx.fillStyle = `rgba(${accentRgb}, 0.75)`;
       ctx.fillRect(targetX - 10, groundY - 1, 20, 2);
       ctx.fillRect(targetX - 1, groundY - 6, 2, 6);
 
-      // Particles — draw in kind order so flashes/rings sit on top.
       drawParticlesOfKind("fire");
       drawParticlesOfKind("smoke");
       drawFireballs();
@@ -529,7 +595,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       drawParticlesOfKind("ring");
       drawParticlesOfKind("flash");
 
-      // Projectiles.
       for (const p of projectiles) {
         const angle = Math.atan2(p.vy, p.vx);
         ctx.save();
@@ -547,7 +612,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
         const life = Math.min(1, q.age / q.lifespan);
         const fade = 1 - life;
         if (kind === "fire") {
-          // Animated crackle — alternate between hot yellow and deep orange.
           const flick = 0.7 + Math.sin((q.age + q.x * 0.4) * 12) * 0.25;
           ctx.globalAlpha = Math.min(1, fade * 1.4) * flick;
           const g = ctx.createRadialGradient(q.x, q.y - 2, 1, q.x, q.y - 2, q.size);
@@ -611,8 +675,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
           ctx.fill();
           continue;
         }
-        // spark — sometimes doubles as a fireball particle; fireballs are
-        // drawn in a dedicated pass above, so skip those here.
         if (q.sizeEnd !== undefined) continue;
         ctx.globalAlpha = fade;
         ctx.fillStyle = q.color;
@@ -643,7 +705,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       ctx.restore();
     }
 
-    // Loop ————————————————————————————————————————————————————————
     let raf = 0;
     let lastMs = 0;
     resetCycle();
@@ -654,8 +715,6 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
       lastMs = ms;
       cycleMs += dt * 1000;
 
-      // Restart the cycle once everything has settled, or at the hard
-      // cap so long napalm durations don't block looping.
       const settled =
         projectiles.length === 0 &&
         particles.every((q) => q.kind === "fire" && q.persist);
@@ -676,10 +735,8 @@ function WeaponPreview({ weapon }: { weapon: WeaponId }): JSX.Element {
     return () => cancelAnimationFrame(raf);
   }, [weapon]);
 
-  return <canvas ref={canvasRef} className="arsenal-preview" />;
+  return <canvas ref={canvasRef} className="crt-feed" />;
 }
-
-// Helpers —————————————————————————————————————————————————————————
 
 function groundAt(x: number, mounds: Mound[], base: number): number {
   let y = base;
@@ -730,7 +787,6 @@ function drawProjectileShape(
     ctx.fill(); ctx.stroke();
     return;
   }
-  // Classic shell — pointed at direction of travel.
   const w = 16 * scale, h = 8 * scale;
   ctx.fillStyle = color;
   ctx.strokeStyle = "rgba(0,0,0,0.7)";
@@ -748,16 +804,14 @@ function drawProjectileShape(
   ctx.fillRect(-w / 2 + 5, -h / 2, 1, h);
 }
 
-/** Canonical tank silhouette — same renderer Customize uses so the
- *  Arsenal, leaderboard, and profile screens all stay visually aligned. */
 function drawMiniTank(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   barrelAngle = -Math.PI / 4,
 ): void {
-  const W = 66;
-  const hullFrac = 0.34; // heavy
+  const W = 80;
+  const hullFrac = 0.34;
   const treadFrac = 0.13;
   const hullH = W * hullFrac;
   const treadH = Math.max(8, W * treadFrac);

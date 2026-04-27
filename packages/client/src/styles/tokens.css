@@ -30,6 +30,12 @@
   --panel-edge: rgba(58, 65, 80, 0.8);
   --panel-edge-strong: rgba(208, 122, 60, 0.7);
 
+  /* Chrome bands at the top + bottom of the viewport. The page area
+     and game-route surfaces both shrink to fit between them so the
+     ribbon nav and music dock are part of the layout, not overlays. */
+  --nav-h: 56px;
+  --dock-h: 60px;
+
   --font-display: "Oswald", "Orbitron", "Chakra Petch", system-ui, sans-serif;
   --font-body: "Chakra Petch", ui-sans-serif, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
@@ -46,32 +52,54 @@
   --theme-accent-rgb: 224, 120, 69;      /* rust-bright rgb — for rgba glows */
   --theme-brand: var(--rust-bright);
   --theme-card-texture: url("/textures/ui/rust.jpg");
-  --theme-btn-texture: url("/textures/ui/plates.jpg");
   --theme-card-wash: linear-gradient(90deg, rgba(150,60,20,0.15), rgba(150,60,20,0) 120px);
   --theme-card-tint: linear-gradient(180deg, rgba(40,20,10,0.65), rgba(18,10,4,0.82));
-  --theme-btn-primary-fill: #b14120;
+  /* Music receiver play button (radio-knob-play). The other former
+     --theme-btn-* variants got removed when the metal button chassis
+     was deleted. */
   --theme-btn-primary-gradient: linear-gradient(180deg, rgba(220,100,40,0.55), rgba(90,20,6,0.9));
   --theme-btn-primary-border: #3b1508;
   --theme-btn-primary-color: #ffe7d2;
-  --theme-btn-primary-shadow: rgba(150, 50, 20, 0.45);
-  --theme-pill-active: linear-gradient(180deg, #c4521f 0%, #8f2a0e 100%);
-  --theme-pill-active-border: #3b1508;
-  --theme-pill-active-color: #fff1df;
-  --theme-mode-active-bg: linear-gradient(180deg, rgba(70,30,15,0.5), rgba(40,20,12,0.75));
   --theme-nav-underline: rgba(120, 90, 40, 0.2);
   --theme-splash-glow-a: rgba(255, 180, 90, 0.35);
   --theme-splash-glow-b: rgba(200, 80, 30, 0.22);
 
-  /* Control accents — slider thumb (idle), switch handle (on state). */
+  /* Music receiver tuner fill gradient. */
   --theme-ctl-top: #d49228;
   --theme-ctl-bottom: #8c5d14;
-  --theme-switch-on-bg: #6e4a10;
-  --theme-switch-on-top: #ffc56e;
-  --theme-switch-on-bottom: #a5631a;
 
-  /* Switch OFF state — track bg + handle gradient when toggle is off. */
-  --theme-switch-off-bg: #1a1208;
-  --theme-switch-off-track-tint: linear-gradient(180deg, rgba(60,55,40,0.6), rgba(12,10,6,0.9));
-  --theme-switch-off-top: #8d7a4e;
-  --theme-switch-off-bottom: #3a2d15;
+  /* ───── Diegetic tokens — neutral surfaces shared across menu scenes ─────
+     Theme-agnostic on purpose. Edge accents on these surfaces still pull
+     from --theme-accent-bright so the 5 themes flow through. */
+  --paper: #e8dcc4;
+  --paper-edge: #b9a984;
+  --paper-shadow: rgba(0, 0, 0, 0.4);
+  --paper-ink: #2a2218;
+  --paper-ink-dim: #6b5d44;
+  --paper-fold: rgba(120, 100, 70, 0.18);
+
+  --manila: #d4b574;
+  --manila-edge: #8a6d3a;
+  --manila-shadow: rgba(0, 0, 0, 0.55);
+
+  --brass: #b08a3e;
+  --brass-bright: #e7c87a;
+  --brass-shadow: #5a4318;
+  --brass-mid: #8e6c25;
+
+  --canvas-tarp: #3b3a2a;
+  --canvas-tarp-light: #4f4d36;
+  --canvas-stitch: #1f1e16;
+
+  --pegboard: #c89a55;
+  --pegboard-shadow: #6a4a1c;
+  --peg-hole: #2a1d0a;
+
+  --stencil-ink: #1a1714;
+  --stencil-fade: rgba(26, 23, 20, 0.65);
+
+  --paint-yellow: #d8a93b;
+  --paint-black: #0d0d0d;
+  --stamp-red: #a82a1f;
+  --stamp-red-dim: rgba(168, 42, 31, 0.7);
 }

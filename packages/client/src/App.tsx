@@ -1,6 +1,5 @@
 import { useEffect } from "react";
 import { Nav } from "./ui/Nav";
-import { Backdrop } from "./ui/Backdrop";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { RegisterPage } from "./pages/RegisterPage";
@@ -35,14 +34,12 @@ export function App(): JSX.Element {
 
   if (loading) {
     return (
-      <>
-        <Backdrop />
-        <div className="screen">
-          <div className="center-card">
-            <h1>Loading…</h1>
-          </div>
+      <div className="screen">
+        <div className="center-card">
+          <span className="center-card-stamp standby">Stand By</span>
+          <h1>Loading</h1>
         </div>
-      </>
+      </div>
     );
   }
 
@@ -75,15 +72,14 @@ export function App(): JSX.Element {
     case "settings": page = <SettingsPage navigate={navigate} />; break;
     case "customize": page = <CustomizePage navigate={navigate} />; break;
     case "arsenal": page = <ArsenalPage navigate={navigate} />; break;
-    case "about": page = <AboutPage navigate={navigate} />; break;
+    case "about": page = <AboutPage />; break;
     case "profile": page = <ProfilePage username={route.username} navigate={navigate} />; break;
   }
 
   return (
     <>
-      <Backdrop />
-      <Nav navigate={navigate} />
-      <div className="page">{page}</div>
+      <Nav navigate={navigate} route={route} />
+      <div className="page" data-route={route.name}>{page}</div>
       <MusicPlayer />
     </>
   );

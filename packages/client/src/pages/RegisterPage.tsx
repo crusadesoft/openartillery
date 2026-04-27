@@ -34,12 +34,18 @@ export function RegisterPage({ navigate }: Props): JSX.Element {
   };
 
   return (
-    <div className="container">
-      <form className="card" style={{ maxWidth: 420, margin: "40px auto" }} onSubmit={submit}>
-        <h2>Create account</h2>
+    <div className="container enlistment-page">
+      <form className="scene-enlistment" onSubmit={submit}>
+        <span className="paperclip" aria-hidden />
+        <span className="form-stamp"><span className="stamp">Processing</span></span>
+        <div className="form-header">
+          <span className="dossier-tab">Enlistment · New Operator</span>
+        </div>
+        <h1 className="form-title">Enlistment papers</h1>
+        <p className="form-tagline">Fill out, sign, file with command.</p>
         {error && <div className="error">{error}</div>}
         <div className="field">
-          <label>Username (3–16, letters/numbers/_)</label>
+          <label>Callsign (3–16, letters/numbers/_)</label>
           <input
             value={username}
             onChange={(e) => setUsername(e.target.value)}
@@ -73,11 +79,11 @@ export function RegisterPage({ navigate }: Props): JSX.Element {
           />
         </div>
         <SfxButton className="primary-btn" type="submit" disabled={pending}>
-          {pending ? "Creating…" : "Register"}
+          {pending ? "Filing…" : "File enlistment"}
         </SfxButton>
         <SfxButton
           type="button"
-          className="ghost-btn"
+          className="ghost-btn form-link"
           onClick={() => navigate({ name: "login" })}
         >
           Already have an account? Sign in

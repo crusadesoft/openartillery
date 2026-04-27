@@ -1,62 +1,42 @@
 import { useEffect, useState } from "react";
-import { loadSettings, saveSettings } from "../pages/SettingsPage";
+import {
+  KnobMount,
+  RockerSwitch,
+  loadSettings,
+  saveSettings,
+} from "../pages/SettingsPage";
 
 /**
- * In-match settings panel (embedded in pause menu). Same fields as the
- * Settings page but compact layout.
+ * In-match settings panel (embedded in pause menu). Reuses the audio
+ * console knobs + rocker switches from SettingsPage so the controls feel
+ * like the same hardware just bolted to a smaller faceplate.
  */
 export function SettingsPanel(): JSX.Element {
   const [s, setS] = useState(() => loadSettings());
   useEffect(() => { saveSettings(s); }, [s]);
 
   return (
-    <div>
-      <Slider label="Master"        value={s.masterVolume} onChange={(v) => setS({ ...s, masterVolume: v })} />
-      <Slider label="Music"         value={s.musicVolume}  onChange={(v) => setS({ ...s, musicVolume: v })} />
-      <Slider label="Sound effects" value={s.sfxVolume}    onChange={(v) => setS({ ...s, sfxVolume: v })} />
-      <Slider label="UI sounds"     value={s.uiVolume}     onChange={(v) => setS({ ...s, uiVolume: v })} />
-      <Toggle label="UI click sounds" value={s.uiClicks} onChange={(v) => setS({ ...s, uiClicks: v })} />
-      <Toggle label="Camera shake" value={s.cameraShake} onChange={(v) => setS({ ...s, cameraShake: v })} />
-      <Toggle label="Reduce motion" value={s.reduceMotion} onChange={(v) => setS({ ...s, reduceMotion: v })} />
-    </div>
-  );
-}
+    <div className="pause-settings">
+      <div className="console-zone">
+        <span className="deck-stencil">GAIN STAGES</span>
+        <div className="deck-knobs">
+          <KnobMount label="MASTER" muteKey="master" value={s.masterVolume} onChange={(v) => setS({ ...s, masterVolume: v })} />
+          <KnobMount label="MUSIC"  muteKey="music"  value={s.musicVolume}  onChange={(v) => setS({ ...s, musicVolume: v })} />
+          <KnobMount label="SFX"    muteKey="sfx"    value={s.sfxVolume}    onChange={(v) => setS({ ...s, sfxVolume: v })} />
+          <KnobMount label="UI"     muteKey="ui"     value={s.uiVolume}     onChange={(v) => setS({ ...s, uiVolume: v })} />
+        </div>
+      </div>
 
-function Slider({
-  label, value, onChange,
-}: { label: string; value: number; onChange: (v: number) => void }) {
-  return (
-    <div className="field">
-      <label>{label} · {Math.round(value * 100)}%</label>
-      <input
-        type="range" min={0} max={100}
-        value={Math.round(value * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-      />
-    </div>
-  );
-}
+      <div className="console-seam" aria-hidden />
 
-function Toggle({
-  label, value, onChange,
-}: { label: string; value: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div
-      style={{
-        display: "flex", alignItems: "center", gap: 14,
-        padding: "10px 0", borderBottom: "1px solid var(--panel-edge)",
-      }}
-    >
-      <label style={{ flex: 1, fontSize: 13, color: "var(--ink)" }}>{label}</label>
-      <button
-        type="button"
-        className="switch"
-        data-on={value ? "true" : "false"}
-        onClick={() => onChange(!value)}
-        aria-pressed={value}
-      >
-        <span className="handle" />
-      </button>
+      <div className="console-zone">
+        <span className="deck-stencil">FUNCTIONS</span>
+        <div className="deck-rockers">
+          <RockerSwitch label="UI CLICKS" value={s.uiClicks} onChange={(v) => setS({ ...s, uiClicks: v })} />
+          <RockerSwitch label="CAM SHAKE" value={s.cameraShake} onChange={(v) => setS({ ...s, cameraShake: v })} />
+          <RockerSwitch label="REDUCE MOTION" value={s.reduceMotion} onChange={(v) => setS({ ...s, reduceMotion: v })} />
+        </div>
+      </div>
     </div>
   );
 }

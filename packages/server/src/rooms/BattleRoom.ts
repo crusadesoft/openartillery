@@ -86,6 +86,10 @@ export class BattleRoom extends Room<BattleState> {
   /** Optional join gate for private rooms. Stored only on the instance —
    *  never written to state — so it doesn't leak through schema patches. */
   private password: string | null = null;
+  /** Fresh custom lobbies seat one bot for the host's convenience, but
+   *  only after the host themselves has taken a slot — so the roster
+   *  reads "you, then bot" instead of "bot, then you". */
+  private pendingDefaultBot = false;
 
   override async onCreate(options: RoomOptions = { mode: "custom", username: "Player" }) {
     this.initialOptions = options;
@@ -154,10 +158,12 @@ export class BattleRoom extends Room<BattleState> {
     this.refreshMetadata();
 
     // Preload bots for "bots" mode or for any casual lobby created with a botCount.
-    if (casual && options.botCount != null && Number(options.botCount) > 0) {
+    // Fresh `custom` lobbies default to one bot so a solo host can jump
+    // straight into a match; the host can remove it from the roster.
+    if (casual && options.botCount != null) {
       const count = clamp(
         Number(options.botCount),
-        1,
+        0,
         maxPlayers - 1,
       );
       const diff = (options.botDifficulty ?? "normal") as BotDifficulty;
@@ -174,6 +180,8 @@ export class BattleRoom extends Room<BattleState> {
       for (let i = 0; i < count; i++) {
         this.addBot(diff);
       }
+    } else if (mode === "custom") {
+      this.pendingDefaultBot = true;
     }
 
     this.onMessage("*", (client, kind, payload) => {
@@ -298,6 +306,11 @@ export class BattleRoom extends Room<BattleState> {
       at: Date.now(),
     });
     this.logEvent({ kind: "join", id: p.id, name: p.name, userId: p.userId });
+
+    if (this.pendingDefaultBot && this.state.players.size < this.state.maxPlayers) {
+      this.pendingDefaultBot = false;
+      this.addBot("normal");
+    }
   }
 
   override async onLeave(client: Client, consented: boolean): Promise<void> {
@@ -922,6 +935,7 @@ export class BattleRoom extends Room<BattleState> {
       name: p.name,
       text: text.slice(0, 140),
       at: Date.now(),
+      color: p.color,
     });
   }
 
@@ -1624,6 +1638,7 @@ export class BattleRoom extends Room<BattleState> {
       name: bot.name,
       text,
       at: Date.now(),
+      color: bot.color,
     });
   }
 

@@ -24,7 +24,7 @@ import { PauseMenu } from "./PauseMenu";
 
 interface Props { room: Room<BattleState>; onLeave: () => void; }
 
-interface ChatEntry { id: number; name: string; text: string; system?: boolean; }
+interface ChatEntry { id: number; name: string; text: string; system?: boolean; color?: number; }
 
 export function GameShell({ room, onLeave }: Props): JSX.Element {
   const [phase, setPhase] = useState<MatchPhase>(room.state.phase);
@@ -96,6 +96,7 @@ export function GameShell({ room, onLeave }: Props): JSX.Element {
           name: evt.name,
           text: evt.text,
           system: evt.name === "server",
+          color: evt.color,
         });
       } else if (evt.type === "kill") {
         setLastKill(evt);

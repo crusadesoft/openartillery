@@ -86,7 +86,18 @@ export function Minimap({ room, tick }: Props): JSX.Element {
 
   return (
     <div className="minimap">
-      <canvas ref={canvasRef} />
+      <span className="hud-rivet tl" />
+      <span className="hud-rivet tr" />
+      <span className="hud-rivet bl" />
+      <span className="hud-rivet br" />
+      <div className="minimap-bezel">
+        <div className="minimap-glass">
+          <canvas ref={canvasRef} />
+          <div className="minimap-scanlines" aria-hidden />
+          <div className="minimap-vignette" aria-hidden />
+        </div>
+      </div>
+      <div className="minimap-stencil">RADAR · 1:50K</div>
     </div>
   );
 }

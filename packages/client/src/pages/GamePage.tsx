@@ -120,7 +120,8 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
     return (
       <div className="screen">
         <div className="center-card">
-          <h1>Connecting…</h1>
+          <span className="center-card-stamp standby">Stand By</span>
+          <h1>Connecting</h1>
           <p className="tagline">
             Mode: <strong>{route.mode}</strong>
             {route.inviteCode ? ` · code ${route.inviteCode}` : ""}
@@ -134,20 +135,23 @@ export function GamePage({ route, navigate }: Props): JSX.Element {
     return (
       <div className="screen">
         <div className="center-card">
+          <span className="center-card-stamp">No Signal</span>
           <h1>Couldn't join</h1>
           <div className="error">{state.message}</div>
-          <button
-            className="primary-btn"
-            onClick={() => connect({ aborted: false })}
-          >
-            Retry
-          </button>
-          <button
-            className="secondary-btn"
-            onClick={() => navigate({ name: "play" })}
-          >
-            Back
-          </button>
+          <div className="row">
+            <button
+              className="primary-btn"
+              onClick={() => connect({ aborted: false })}
+            >
+              Retry
+            </button>
+            <button
+              className="secondary-btn"
+              onClick={() => navigate({ name: "play" })}
+            >
+              Back
+            </button>
+          </div>
         </div>
       </div>
     );

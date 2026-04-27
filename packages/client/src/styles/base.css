@@ -6,7 +6,7 @@ html, body {
   cursor: url("/cursors/arrow.svg") 2 1, default;
 }
 a, button, [role="button"], label, select,
-.pill, .mode-card, .switch, .part-tile, .swatch, .weapon-tile,
+.weapon-tile, .item-tile,
 input[type="checkbox"], input[type="radio"], input[type="range"] {
   cursor: url("/cursors/pointer.svg") 8 1, pointer;
 }
@@ -45,8 +45,7 @@ input, textarea, [contenteditable="true"] {
 input[type="text"], input[type="password"], input[type="email"], input[type="search"] {
   cursor: text;
 }
-button, .swatch, .pill, .mode-card, .weapon-tile, .engagement-list li, .brass-list li,
-.part-tile, .switch, .mp-head, .mp-buttons button, .mp-collapse, .mp-toggle {
+button, .weapon-tile, .item-tile, .radio-knob {
   cursor: pointer;
 }
 a { cursor: pointer; }

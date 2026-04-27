@@ -17,7 +17,7 @@ import {
   WEAPONS,
 } from "@artillery/shared";
 import { Sound } from "../audio/Sound";
-import { TankView, getTankPreviewTextures } from "../entities/Tank";
+import { TankView } from "../entities/Tank";
 import { TerrainView } from "../entities/TerrainView";
 import { ProjectileView } from "../entities/ProjectileView";
 import { FireView } from "../entities/FireView";
@@ -60,15 +60,6 @@ export class BattleScene extends Phaser.Scene {
   private reticle!: Phaser.GameObjects.Graphics;
   private dragOverlay!: Phaser.GameObjects.Graphics;
   private lastArcGfx!: Phaser.GameObjects.Graphics;
-  private aimLabel?: Phaser.GameObjects.Text;
-  private cursorPreview?: {
-    container: Phaser.GameObjects.Container;
-    hull: Phaser.GameObjects.Image;
-    barrel: Phaser.GameObjects.Image;
-    barrelOffsetX: number;
-    barrelOffsetY: number;
-    loadoutKey: string;
-  };
   private windEmitter?: Phaser.GameObjects.Particles.ParticleEmitter;
   private cursorOnCanvas = false;
   private cursorScreenX = 0;
@@ -359,7 +350,7 @@ export class BattleScene extends Phaser.Scene {
         0,
         Math.min(1, (power - TANK.MIN_POWER) / (TANK.MAX_POWER - TANK.MIN_POWER)),
       );
-      const arrowLen = 40 + powerT * 90;
+      const arrowLen = 32 + Math.pow(Math.max(0, powerT), 1.4) * 320;
       const tipX = baseX + dirX * arrowLen;
       const tipY = baseY + dirY * arrowLen;
       this.lastArcGfx.lineStyle(2, color, 0.6);
@@ -938,10 +929,6 @@ export class BattleScene extends Phaser.Scene {
     this.aimLine.clear();
     this.reticle.clear();
     this.dragOverlay.clear();
-    if (!this.dragging) {
-      if (this.aimLabel) this.aimLabel.setVisible(false);
-      if (this.cursorPreview) this.cursorPreview.container.setVisible(false);
-    }
 
     if (!this.isMyTurn()) return;
     const self = this.room.state.players.get(this.room.sessionId);
@@ -975,9 +962,16 @@ export class BattleScene extends Phaser.Scene {
     const perpX = -dirY;
     const perpY = dirX;
 
+    // Range scales with v² in the physics, so use a slight power curve
+    // so 100% reads as "across-the-map" rather than just "a bit longer".
+    const ARROW_BASE = 32;
+    const ARROW_RANGE = 320;
+    const ARROW_MAX = ARROW_BASE + ARROW_RANGE;
+    const arrowScale = (t: number) => Math.pow(Math.max(0, t), 1.4);
+    const arrowLen = ARROW_BASE + arrowScale(powerT) * ARROW_RANGE;
+
     if (!dense) {
       // Idle: thin tracer of the current aim. No extra chrome.
-      const arrowLen = 40 + powerT * 90;
       const tipX = baseX + dirX * arrowLen;
       const tipY = baseY + dirY * arrowLen;
       this.aimLine.lineStyle(2, 0xd49228, 0.6);
@@ -997,113 +991,55 @@ export class BattleScene extends Phaser.Scene {
     // Active drag: same scale as idle arrow, just thicker line and
     // power-coloured tier tint. Keeps geometry consistent so it never
     // jumps in size when drag begins.
-    const arrowLen = 40 + powerT * 90;
     const tipX = baseX + dirX * arrowLen;
     const tipY = baseY + dirY * arrowLen;
     const tier =
       powerT > 0.9 ? 0xff5a3c :
       powerT > 0.65 ? 0xff8a2a :
       powerT > 0.35 ? 0xffbe52 : 0xf0e090;
-    this.aimLine.lineStyle(3, tier, 0.95);
+    // Steps up at the same thresholds as the tier colour so each
+    // crossing is felt: thicker shaft + bigger arrowhead.
+    const shaftWidth =
+      powerT > 0.9 ? 6 :
+      powerT > 0.65 ? 5 :
+      powerT > 0.35 ? 4 : 3;
+    const headLen = 6 + shaftWidth;
+    const headHalf = 3 + shaftWidth * 0.6;
+
+    // Faint full-range track behind the live arrow plus perpendicular
+    // tick marks at 25/50/75/100% so the player can read power without
+    // chasing the moving tip.
+    const trackEndX = baseX + dirX * ARROW_MAX;
+    const trackEndY = baseY + dirY * ARROW_MAX;
+    this.aimLine.lineStyle(1, 0xffffff, 0.18);
+    this.aimLine.beginPath();
+    this.aimLine.moveTo(baseX, baseY);
+    this.aimLine.lineTo(trackEndX, trackEndY);
+    this.aimLine.strokePath();
+    for (const frac of [0.25, 0.5, 0.75, 1]) {
+      const tickLen = ARROW_BASE + arrowScale(frac) * ARROW_RANGE;
+      const tx = baseX + dirX * tickLen;
+      const ty = baseY + dirY * tickLen;
+      const half = frac === 1 ? 7 : 5;
+      const reached = powerT >= frac - 0.001;
+      this.aimLine.lineStyle(reached ? 2 : 1, reached ? tier : 0xffffff, reached ? 0.85 : 0.32);
+      this.aimLine.beginPath();
+      this.aimLine.moveTo(tx + perpX * half, ty + perpY * half);
+      this.aimLine.lineTo(tx - perpX * half, ty - perpY * half);
+      this.aimLine.strokePath();
+    }
+
+    this.aimLine.lineStyle(shaftWidth, tier, 0.95);
     this.aimLine.beginPath();
     this.aimLine.moveTo(baseX, baseY);
     this.aimLine.lineTo(tipX, tipY);
     this.aimLine.strokePath();
     this.aimLine.fillStyle(tier, 0.95);
     this.aimLine.fillTriangle(
-      tipX + dirX * 8, tipY + dirY * 8,
-      tipX - dirX * 3 + perpX * 5, tipY - dirY * 3 + perpY * 5,
-      tipX - dirX * 3 - perpX * 5, tipY - dirY * 3 - perpY * 5,
+      tipX + dirX * headLen, tipY + dirY * headLen,
+      tipX - dirX * 3 + perpX * headHalf, tipY - dirY * 3 + perpY * headHalf,
+      tipX - dirX * 3 - perpX * headHalf, tipY - dirY * 3 - perpY * headHalf,
     );
-
-    // Cursor tank preview — a mini copy of the local player's tank
-    // anchored at the pointer, with the barrel rotated to match the
-    // current aim. Reuses the in-game hull/barrel textures so colours,
-    // pattern, decal, and turret shape all match instantly.
-    const ptr = this.input.activePointer;
-    this.renderCursorPreview(self, ptr.x, ptr.y, angleDeg, facing, powerT, tier);
-  }
-
-  private renderCursorPreview(
-    self: Player,
-    cx: number,
-    cy: number,
-    angleDeg: number,
-    facing: -1 | 1,
-    powerT: number,
-    tier: number,
-  ): void {
-    const SCALE = 0.7;
-    const PREVIEW_OFFSET_Y = -12;
-
-    const loadoutKey =
-      `${self.bodyStyle}|${self.turretStyle}|${self.barrelStyle}|${self.color}|${self.accentColor}|${self.pattern}|${self.patternColor}|${self.decal}`;
-
-    let p = this.cursorPreview;
-    if (!p || p.loadoutKey !== loadoutKey) {
-      // Tear down any stale preview (loadout changed mid-match).
-      if (p) p.container.destroy(true);
-      const meta = getTankPreviewTextures(this, self);
-      const container = this.add.container(0, 0)
-        .setDepth(16)
-        .setScrollFactor(0);
-      const hull = this.add.image(0, 0, meta.hull.textureKey)
-        .setOrigin(
-          meta.hull.hullCenterX / meta.hull.widthLogical,
-          meta.hull.hullCenterY / meta.hull.heightLogical,
-        )
-        .setDisplaySize(meta.hull.widthLogical, meta.hull.heightLogical);
-      const barrelOffsetX = meta.hull.barrelPivotX - meta.hull.hullCenterX;
-      const barrelOffsetY = meta.hull.barrelPivotY - meta.hull.hullCenterY;
-      const barrel = this.add.image(barrelOffsetX, barrelOffsetY, meta.barrel.textureKey)
-        .setOrigin(
-          meta.barrel.pivotX / meta.barrel.widthLogical,
-          meta.barrel.pivotY / meta.barrel.heightLogical,
-        )
-        .setDisplaySize(meta.barrel.widthLogical, meta.barrel.heightLogical);
-      container.add([hull, barrel]);
-      p = { container, hull, barrel, barrelOffsetX, barrelOffsetY, loadoutKey };
-      this.cursorPreview = p;
-    }
-
-    p.container.setVisible(true);
-    p.container.setPosition(cx, cy + PREVIEW_OFFSET_Y);
-    p.container.setScale(SCALE * facing, SCALE);
-    const angleRad = (angleDeg * Math.PI) / 180;
-    p.barrel.setRotation(-angleRad);
-
-    // Power ring drawn around the preview — faint full circle plus a
-    // bright arc filling clockwise as power climbs.
-    const ringR = 32;
-    this.dragOverlay.lineStyle(2, 0xffffff, 0.18);
-    this.dragOverlay.strokeCircle(cx, cy + PREVIEW_OFFSET_Y, ringR);
-    this.dragOverlay.lineStyle(3, tier, 0.9);
-    this.dragOverlay.beginPath();
-    this.dragOverlay.arc(
-      cx, cy + PREVIEW_OFFSET_Y, ringR,
-      -Math.PI / 2,
-      -Math.PI / 2 + powerT * Math.PI * 2,
-    );
-    this.dragOverlay.strokePath();
-
-    // Power % label below the ring — single readout, no overlap with
-    // arrow since the arrow now lives at the tank.
-    const txt = this.aimLabel ?? this.add
-      .text(0, 0, "", {
-        fontFamily: "JetBrains Mono, monospace",
-        fontSize: "12px",
-        color: "#ffffff",
-        backgroundColor: "rgba(11,16,32,0.9)",
-        padding: { left: 6, right: 6, top: 2, bottom: 2 },
-      })
-      .setDepth(17)
-      .setScrollFactor(0)
-      .setOrigin(0.5, 0);
-    this.aimLabel = txt;
-    txt.setText(`${Math.abs(angleDeg).toFixed(0)}°  ·  ${Math.round(powerT * 100)}%`);
-    txt.setColor(`#${tier.toString(16).padStart(6, "0")}`);
-    txt.setPosition(cx, cy + PREVIEW_OFFSET_Y + ringR + 6);
-    txt.setVisible(true);
   }
 
   private updateCamera(dt: number): void {

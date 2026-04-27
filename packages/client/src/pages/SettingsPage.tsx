@@ -1,39 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Sound } from "../game/audio/Sound";
 import type { Route } from "../router";
-import { SfxButton } from "../ui/SfxButton";
 
 interface Props { navigate: (r: Route) => void; }
-
-export type ConcreteThemeId = "rust" | "desert" | "arctic" | "dusk" | "jungle";
-export type ThemeId = ConcreteThemeId | "random";
-
-const CONCRETE_THEMES: readonly ConcreteThemeId[] = [
-  "rust", "desert", "arctic", "dusk", "jungle",
-] as const;
-
-export const THEMES: ReadonlyArray<{ id: ThemeId; label: string; blurb: string }> = [
-  { id: "random",  label: "Random",  blurb: "Surprise — picks a different theme each visit" },
-  { id: "rust",    label: "Rust",    blurb: "Oxidized metal" },
-  { id: "desert",  label: "Desert",  blurb: "Sun-bleached ochre" },
-  { id: "arctic",  label: "Arctic",  blurb: "Cold steel · snow glare" },
-  { id: "dusk",    label: "Dusk",    blurb: "Violet twilight" },
-  { id: "jungle",  label: "Jungle",  blurb: "Olive canopy" },
-];
-
-// Resolve "random" to a concrete theme once per session so the look stays
-// stable while the player navigates around — switching pages shouldn't
-// re-roll. New tab / hard refresh = new roll.
-let SESSION_RANDOM: ConcreteThemeId | null = null;
-function resolveTheme(stored: ThemeId): ConcreteThemeId {
-  if (stored !== "random") return stored;
-  if (!SESSION_RANDOM) {
-    SESSION_RANDOM = CONCRETE_THEMES[
-      Math.floor(Math.random() * CONCRETE_THEMES.length)
-    ]!;
-  }
-  return SESSION_RANDOM;
-}
 
 export interface StoredSettings {
   masterVolume: number;
@@ -43,7 +12,6 @@ export interface StoredSettings {
   uiClicks: boolean;
   reduceMotion: boolean;
   cameraShake: boolean;
-  theme: ThemeId;
 }
 
 const DEFAULTS: StoredSettings = {
@@ -54,7 +22,6 @@ const DEFAULTS: StoredSettings = {
   uiClicks: true,
   reduceMotion: false,
   cameraShake: true,
-  theme: "random",
 };
 
 const STORAGE_KEY = "artillery:settings";
@@ -63,9 +30,7 @@ export function loadSettings(): StoredSettings {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return { ...DEFAULTS };
-    const parsed = { ...DEFAULTS, ...JSON.parse(raw) };
-    if (!THEMES.some((t) => t.id === parsed.theme)) parsed.theme = DEFAULTS.theme;
-    return parsed;
+    return { ...DEFAULTS, ...JSON.parse(raw) };
   } catch { return { ...DEFAULTS }; }
 }
 
@@ -76,14 +41,10 @@ export function saveSettings(s: StoredSettings): void {
   Sound.setSfxVolume(s.sfxVolume);
   Sound.setUiVolume(s.uiClicks ? s.uiVolume : 0);
   document.documentElement.dataset.reducedMotion = s.reduceMotion ? "1" : "0";
-  document.documentElement.dataset.theme = resolveTheme(s.theme);
 }
 
 export function applySettingsOnBoot(): void {
   saveSettings(loadSettings());
-  // Mute flags live in their own storage key (toggled by the MusicPlayer
-  // UI outside of this settings flow). Restore them so a page refresh
-  // doesn't un-mute the user.
   Sound.loadPersistedMutes();
 }
 
@@ -92,157 +53,239 @@ export function SettingsPage({ navigate }: Props): JSX.Element {
   useEffect(() => { saveSettings(s); }, [s]);
 
   return (
-    <div className="container">
-      <div className="card">
-        <h2>Audio</h2>
-        <Slider label="Master"        value={s.masterVolume} muteKey="master" onChange={(v) => setS({ ...s, masterVolume: v })} />
-        <Slider label="Music"         value={s.musicVolume}  muteKey="music"  onChange={(v) => setS({ ...s, musicVolume: v })} />
-        <Slider label="Sound effects" value={s.sfxVolume}    muteKey="sfx"    onChange={(v) => setS({ ...s, sfxVolume: v })} />
-        <Slider label="UI sounds"     value={s.uiVolume}     muteKey="ui"     onChange={(v) => setS({ ...s, uiVolume: v })} />
-      </div>
+    <div className="audio-booth">
+      <div className="audio-booth-grid">
+        <section className="console-rack" aria-label="Audio mixing console">
+          <div className="console-rack-cabinet">
+            <div className="console-rack-top" aria-hidden>
+              <span className="rack-vent" />
+              <span className="rack-vent" />
+              <span className="rack-vent" />
+              <span className="rack-vent" />
+              <span className="rack-vent" />
+            </div>
 
-      <div className="card">
-        <h2>Interface</h2>
-        <Toggle label="UI click sounds" value={s.uiClicks} onChange={(v) => setS({ ...s, uiClicks: v })} />
-        <Toggle label="Camera shake on explosions" value={s.cameraShake} onChange={(v) => setS({ ...s, cameraShake: v })} />
-        <Toggle label="Reduce motion" value={s.reduceMotion} onChange={(v) => setS({ ...s, reduceMotion: v })} />
+            <div className="console-faceplate">
+              <div className="deck-nameplate-strip">
+                <span className="screw screw-tl" /><span className="screw screw-tr" />
+                <span className="deck-nameplate-line">AUDIO COMMAND · CONSOLE SC-7G</span>
+                <span className="deck-nameplate-sn">SN 3F2A · MIL-SPEC</span>
+                <span className="screw screw-bl" /><span className="screw screw-br" />
+              </div>
 
-        <div className="field" style={{ marginTop: 14 }}>
-          <label style={{ display: "block", marginBottom: 8 }}>Menu theme</label>
-          <div className="theme-picker">
-            {THEMES.map((t) => (
-              <button
-                key={t.id}
-                type="button"
-                className={`theme-swatch ${s.theme === t.id ? "on" : ""}`}
-                data-theme-preview={t.id}
-                onClick={() => setS({ ...s, theme: t.id })}
-                aria-pressed={s.theme === t.id}
-                title={t.blurb}
-              >
-                <span className="theme-chip" aria-hidden />
-                <span className="theme-label">{t.label}</span>
-              </button>
-            ))}
+              <div className="console-zone">
+                <span className="deck-stencil">GAIN STAGES</span>
+                <div className="deck-knobs">
+                  <KnobMount label="MASTER" muteKey="master" value={s.masterVolume} onChange={(v) => setS({ ...s, masterVolume: v })} />
+                  <KnobMount label="MUSIC"  muteKey="music"  value={s.musicVolume}  onChange={(v) => setS({ ...s, musicVolume: v })} />
+                  <KnobMount label="SFX"    muteKey="sfx"    value={s.sfxVolume}    onChange={(v) => setS({ ...s, sfxVolume: v })} />
+                  <KnobMount label="UI"     muteKey="ui"     value={s.uiVolume}     onChange={(v) => setS({ ...s, uiVolume: v })} />
+                </div>
+              </div>
+
+              <div className="console-seam" aria-hidden />
+
+              <div className="console-zone">
+                <span className="deck-stencil">FUNCTIONS</span>
+                <div className="deck-rockers">
+                  <RockerSwitch label="UI CLICKS" value={s.uiClicks} onChange={(v) => setS({ ...s, uiClicks: v })} />
+                  <RockerSwitch label="CAM SHAKE" value={s.cameraShake} onChange={(v) => setS({ ...s, cameraShake: v })} />
+                  <RockerSwitch label="REDUCE MOTION" value={s.reduceMotion} onChange={(v) => setS({ ...s, reduceMotion: v })} />
+                </div>
+              </div>
+
+              <div className="console-action-strip">
+                <span className="action-stencil" aria-hidden>FACTORY RESET</span>
+                <DeckButton label="Restore Defaults" onClick={() => setS({ ...DEFAULTS })} />
+              </div>
+            </div>
           </div>
-        </div>
 
-        <div style={{ marginTop: 20 }}>
-          <SfxButton className="secondary-btn" onClick={() => setS({ ...DEFAULTS })}>Restore defaults</SfxButton>
-          <SfxButton className="ghost-btn" onClick={() => navigate({ name: "home" })}>← Back</SfxButton>
-        </div>
-      </div>
+          <div className="console-rack-feet" aria-hidden>
+            <span className="console-rack-foot" />
+            <span className="console-rack-foot" />
+          </div>
+        </section>
 
-      <div className="card">
-        <h2>Keybindings</h2>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: 0 }}>
-          Drag on the battlefield to aim. Drag distance = power. Release doesn't
-          fire — press <code>SPACE</code> (or the red FIRE button). Drive with{" "}
-          <code>A/D</code> or arrow keys. <code>1–9</code> selects weapons.{" "}
-          <code>Q/W/E/R</code> uses items. <code>Enter</code> opens chat (Enter
-          again sends, Esc cancels). <code>ESC</code> opens the pause menu.
-        </p>
-      </div>
-
-      <div className="card">
-        <h2>Credits</h2>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: "0 0 6px" }}>
-          Music by <a href="https://www.scottbuckley.com.au" target="_blank" rel="noreferrer">Scott Buckley</a> — "Meanwhile" &amp; "Simulacra", CC-BY 4.0.
-        </p>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: "0 0 6px" }}>
-          Explosion SFX by Viktor Hahn (opengameart.org) — CC-BY-SA 3.0.
-        </p>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: "0 0 6px" }}>
-          Cannon fire by Thimras (opengameart.org) — CC0.
-        </p>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: "0 0 6px" }}>
-          UI sounds by p0ss (opengameart.org) — CC-BY-SA 3.0.
-        </p>
-        <p style={{ color: "var(--ink-dim)", fontSize: 13, margin: 0 }}>
-          PBR textures from <a href="https://ambientcg.com" target="_blank" rel="noreferrer">ambientCG</a> — CC0.
-        </p>
+        <aside className="ops-clipboard" aria-label="Operator reference">
+          <div className="ops-clip" aria-hidden>
+            <span className="clipboard-clip-screw clipboard-clip-screw-l" />
+            <span className="clipboard-clip-screw clipboard-clip-screw-r" />
+          </div>
+          <div className="ops-paper">
+            <header className="ops-paper-head">
+              <div className="ops-paper-num">SECTION 07</div>
+              <h3 className="ops-paper-title">Operator Reference</h3>
+              <div className="ops-paper-sub">Controls &amp; callouts</div>
+            </header>
+            <div className="ops-paper-body">
+              <KeyRow keys={["DRAG"]} text="Aim · drag = power" />
+              <KeyRow keys={["SPACE"]} text="Fire (or red button)" />
+              <KeyRow keys={["A", "D"]} text="Drive · or arrows" />
+              <KeyRow keys={["1", "—", "9"]} text="Pick weapons" />
+              <KeyRow keys={["Q", "W", "E", "R"]} text="Use items" />
+              <KeyRow keys={["ENTER"]} text="Chat" />
+              <KeyRow keys={["ESC"]} text="Pause" />
+            </div>
+          </div>
+        </aside>
       </div>
     </div>
   );
 }
 
-function Slider({
-  label, value, muteKey, onChange,
+export function KnobMount({
+  label, muteKey, value, onChange,
 }: {
   label: string;
+  muteKey: "master" | "music" | "sfx" | "ui";
   value: number;
   onChange: (v: number) => void;
-  muteKey?: "master" | "music" | "sfx" | "ui";
 }) {
-  // Track mute state so we can re-render when toggled. Stored volume is
-  // untouched by mute — the toggle just sets a flag inside Sound.
   const [, setMuteTick] = useState(0);
-  useEffect(() => muteKey
-    ? Sound.onMuteChange(() => setMuteTick((t) => t + 1))
-    : undefined,
-    [muteKey]);
-  const muted = muteKey ? Sound.isMuted(muteKey) : false;
+  useEffect(() => Sound.onMuteChange(() => setMuteTick((t) => t + 1)), [muteKey]);
+  const muted = Sound.isMuted(muteKey);
+  const pct = Math.round(value * 100);
+  const meterSegments = 10;
+  const lit = muted ? 0 : Math.round((pct / 100) * meterSegments);
 
   return (
-    <div className="field">
-      <label style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <span style={{ flex: 1 }}>
-          {label} · {muted ? <em style={{ color: "var(--theme-accent-bright)" }}>MUTED</em> : `${Math.round(value * 100)}%`}
-        </span>
-        {muteKey && (
-          <button
-            type="button"
-            className={`mute-chip ${muted ? "on" : ""}`}
-            onClick={() => Sound.toggleMuted(muteKey)}
-            title={muted ? "Un-mute" : "Mute"}
-            aria-label={muted ? "Un-mute" : "Mute"}
-          >
-            <span
-              className="icon-mask mute-chip-icon"
-              style={{
-                WebkitMaskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
-                maskImage: `url(${muted ? "/icons/audio/speaker-off.svg" : "/icons/audio/speaker-on.svg"})`,
-              }}
-            />
-          </button>
-        )}
-      </label>
-      <input
-        type="range" min={0} max={100}
-        value={Math.round(value * 100)}
-        onChange={(e) => onChange(Number(e.target.value) / 100)}
-        disabled={muted}
-        style={muted ? { opacity: 0.35 } : undefined}
-      />
+    <div className={`knob-mount ${muted ? "muted" : ""}`}>
+      <Knob value={value} onChange={onChange} disabled={muted} />
+      <div className="vu-strip" aria-hidden>
+        {Array.from({ length: meterSegments }).map((_, i) => (
+          <span
+            key={i}
+            className={`vu-led ${i < lit ? "on" : ""} ${i >= meterSegments - 2 ? "red" : i >= meterSegments - 4 ? "amber" : ""}`}
+          />
+        ))}
+      </div>
+      <div className="knob-engraving">{label}</div>
+      <button
+        type="button"
+        className={`mute-lamp ${muted ? "lit" : ""}`}
+        onClick={() => Sound.toggleMuted(muteKey)}
+        aria-label={muted ? "Un-mute" : "Mute"}
+        title={muted ? "Un-mute" : "Mute"}
+      >
+        <span className="lamp-led" />
+      </button>
     </div>
   );
 }
 
-function Toggle({
-  label, value, onChange,
-}: {
-  label: string; value: boolean; onChange: (v: boolean) => void;
-}) {
+/**
+ * Real rotary knob — vertical drag to change value (drag up = increase).
+ * Range: 0–1. Visual rotation: -135° (0) → +135° (1).
+ */
+function Knob({
+  value, onChange, disabled,
+}: { value: number; onChange: (v: number) => void; disabled?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const dragging = useRef<{ startY: number; startV: number } | null>(null);
+
+  useEffect(() => {
+    const move = (e: PointerEvent) => {
+      const d = dragging.current;
+      if (!d) return;
+      const delta = (d.startY - e.clientY) / 200; // 200px = full sweep
+      onChange(Math.max(0, Math.min(1, d.startV + delta)));
+    };
+    const up = () => { dragging.current = null; document.body.classList.remove("knob-grabbing"); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+  }, [onChange]);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    if (disabled) return;
+    dragging.current = { startY: e.clientY, startV: value };
+    document.body.classList.add("knob-grabbing");
+  };
+
+  const onWheel = (e: React.WheelEvent) => {
+    if (disabled) return;
+    e.preventDefault();
+    const delta = -e.deltaY / 1000;
+    onChange(Math.max(0, Math.min(1, value + delta)));
+  };
+
+  const angle = -135 + value * 270;
+
   return (
     <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "10px 0",
-        borderBottom: "1px solid var(--panel-edge)",
-      }}
+      ref={ref}
+      className={`knob-physical ${disabled ? "disabled" : ""}`}
+      onPointerDown={onPointerDown}
+      onWheel={onWheel}
+      role="slider"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(value * 100)}
     >
-      <label style={{ flex: 1, fontSize: 14, color: "var(--ink)" }}>{label}</label>
+      <div className="knob-tickring">
+        {Array.from({ length: 11 }).map((_, i) => {
+          const a = -135 + (i / 10) * 270;
+          return <span key={i} className="knob-tick" style={{ transform: `rotate(${a}deg) translateY(-42px)` }} />;
+        })}
+      </div>
+      <div className="knob-body" style={{ transform: `rotate(${angle}deg)` }}>
+        <span className="knob-pointer" />
+      </div>
+    </div>
+  );
+}
+
+export function RockerSwitch({
+  label, value, onChange,
+}: { label: string; value: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <div className={`rocker-cell ${value ? "on" : ""}`}>
+      <div className="rocker-cell-label">{label}</div>
       <button
         type="button"
-        className="switch"
+        className="rocker-physical"
         data-on={value ? "true" : "false"}
         onClick={() => onChange(!value)}
         aria-pressed={value}
       >
-        <span className="handle" />
+        <span className="rocker-up" aria-hidden>I</span>
+        <span className="rocker-down" aria-hidden>O</span>
       </button>
+      <span className={`rocker-led ${value ? "on" : ""}`} />
     </div>
+  );
+}
+
+function KeyRow({ keys, text }: { keys: string[]; text: string }) {
+  return (
+    <div className="legend-row">
+      <div className="legend-keys">
+        {keys.map((k, i) => <span key={i} className="keycap">{k}</span>)}
+      </div>
+      <div className="legend-desc">{text}</div>
+    </div>
+  );
+}
+
+export function DeckButton({
+  label, onClick, variant,
+}: {
+  label: string;
+  onClick: () => void;
+  variant?: "go" | "danger";
+}) {
+  return (
+    <button
+      type="button"
+      className={`deck-btn ${variant ? `deck-btn-${variant}` : ""}`}
+      onClick={onClick}
+    >
+      <span className="deck-btn-led" />
+      <span className="deck-btn-label">{label}</span>
+    </button>
   );
 }

@@ -1,25 +1,40 @@
 import { useEffect, useRef, useState } from "react";
 
+function nameColor(c: number): string {
+  let r = (c >> 16) & 0xff;
+  let g = (c >> 8) & 0xff;
+  let b = c & 0xff;
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const MIN_LUM = 0.65;
+  if (lum < MIN_LUM) {
+    const t = (MIN_LUM - lum) / (1 - lum);
+    r = Math.round(r + (255 - r) * t);
+    g = Math.round(g + (255 - g) * t);
+    b = Math.round(b + (255 - b) * t);
+  }
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, "0")}`;
+}
+
 interface Entry {
   id: number;
   name: string;
   text: string;
   system?: boolean;
+  color?: number;
 }
 
 interface Props {
   entries: Entry[];
   onSend: (text: string) => void;
-  variant?: "floating" | "embedded";
-  placeholder?: string;
 }
 
-export function ChatPanel({
-  entries,
-  onSend,
-  variant = "floating",
-  placeholder = "Press Enter to chat · Esc cancels",
-}: Props): JSX.Element {
+/**
+ * Battle chat — same FIELD · MODEL 7G CRT monitor as the lobby briefing
+ * room, so transmissions feel like they're coming over the same set
+ * regardless of phase. Mirrors BriefingCrtChat in Lobby.tsx; both share
+ * the .crt-cabinet kit in diegetic.css.
+ */
+export function ChatPanel({ entries, onSend }: Props): JSX.Element {
   const [text, setText] = useState("");
   const logRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -28,9 +43,7 @@ export function ChatPanel({
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
   }, [entries]);
 
-  // Enter globally focuses the chat input. Space remains the fire key, so
-  // Enter is freed up for chat — press once to open the input, type, press
-  // Enter again to send.
+  // Enter focuses the chat input. Space remains the fire key.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Enter") return;
@@ -57,8 +70,6 @@ export function ChatPanel({
     inputRef.current?.blur();
   };
 
-  // Handle Enter ourselves so we don't rely on form-submit semantics that
-  // Phaser's global keydown can trample.
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
       e.preventDefault();
@@ -73,31 +84,57 @@ export function ChatPanel({
 
   return (
     <div
-      className={`chat-panel ${variant === "embedded" ? "embedded" : ""}`}
+      className="chat-panel crt-cabinet"
       onPointerDown={(e) => e.stopPropagation()}
     >
-      <div className="chat-log" ref={logRef}>
-        {entries.map((e) => (
-          <div key={e.id} className={e.system ? "system" : undefined}>
-            {e.system ? (
-              e.text
+      <span className="crt-vent" aria-hidden />
+      <div className="crt-screen-mount">
+        <div className="crt-tube">
+          <div className="crt-log" ref={logRef}>
+            {entries.length === 0 ? (
+              <div className="crt-log-empty">— no transmissions —</div>
             ) : (
-              <>
-                <strong>{e.name}:</strong> {e.text}
-              </>
+              entries.map((e) => (
+                <div key={e.id} className={e.system ? "crt-line system" : "crt-line"}>
+                  {e.system ? (
+                    <span className="crt-line-system">▌ {e.text}</span>
+                  ) : (
+                    <>
+                      <span
+                        className="crt-line-name"
+                        style={e.color !== undefined ? { color: nameColor(e.color) } : undefined}
+                      >
+                        {e.name}:
+                      </span>{" "}
+                      <span className="crt-line-text">{e.text}</span>
+                    </>
+                  )}
+                </div>
+              ))
             )}
           </div>
-        ))}
+          <div className="crt-prompt-line">
+            <span className="crt-prompt" aria-hidden>{">"}</span>
+            <input
+              ref={inputRef}
+              className="crt-input"
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              onKeyDown={onKeyDown}
+              placeholder="press ENTER to transmit…"
+              maxLength={140}
+            />
+          </div>
+          <span className="crt-scanlines" aria-hidden />
+          <span className="crt-vignette" aria-hidden />
+          <span className="crt-glare" aria-hidden />
+        </div>
       </div>
-      <input
-        ref={inputRef}
-        className="chat-input"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={onKeyDown}
-        placeholder={placeholder}
-        maxLength={140}
-      />
+      <div className="crt-chin">
+        <span className="crt-led on" />
+        <span className="crt-brand">FIELD · MODEL 7G</span>
+        <span className="crt-speaker" />
+      </div>
     </div>
   );
 }

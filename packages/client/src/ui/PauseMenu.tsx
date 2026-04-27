@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
-import { SfxButton } from "./SfxButton";
+import { DeckButton } from "../pages/SettingsPage";
 import { SettingsPanel } from "./SettingsPanel";
 
 interface Props { onLeave: () => void; }
 
 /**
- * Escape-triggered pause overlay. Settings are reachable inline so the
- * player can tweak volume / motion / clicks without leaving the match.
+ * Escape-triggered pause overlay rendered as a mini rack-mount console
+ * (matches SettingsPage). Settings live behind an inline tab so the
+ * player can tweak gains / rockers without leaving the match.
  */
 export function PauseMenu({ onLeave }: Props): JSX.Element | null {
   const [open, setOpen] = useState(false);
@@ -26,55 +27,79 @@ export function PauseMenu({ onLeave }: Props): JSX.Element | null {
   if (!open) return null;
   return (
     <div className="pause-menu" onClick={() => setOpen(false)}>
-      <div className="panel" onClick={(e) => e.stopPropagation()}>
-        <h1>Paused</h1>
-        <div className="pill-row" style={{ marginBottom: 18 }}>
-          <div
-            className={`pill ${tab === "menu" ? "active" : ""}`}
-            onClick={() => setTab("menu")}
-          >
-            Menu
+      <div className="pause-console" onClick={(e) => e.stopPropagation()}>
+        <div className="console-rack-cabinet">
+          <div className="console-rack-top" aria-hidden>
+            <span className="rack-vent" />
+            <span className="rack-vent" />
+            <span className="rack-vent" />
+            <span className="rack-vent" />
+            <span className="rack-vent" />
           </div>
-          <div
-            className={`pill ${tab === "settings" ? "active" : ""}`}
-            onClick={() => setTab("settings")}
-          >
-            Settings
+
+          <div className="console-faceplate">
+            <div className="deck-nameplate-strip">
+              <span className="screw screw-tl" /><span className="screw screw-tr" />
+              <span className="deck-nameplate-line">PAUSED · INTERMISSION</span>
+              <span className="deck-nameplate-sn">CH 00 · STANDBY</span>
+              <span className="screw screw-bl" /><span className="screw screw-br" />
+            </div>
+
+            <div className="pause-tabs" role="tablist">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "menu"}
+                className={`pause-tab ${tab === "menu" ? "active" : ""}`}
+                onClick={() => setTab("menu")}
+              >
+                Menu
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab === "settings"}
+                className={`pause-tab ${tab === "settings" ? "active" : ""}`}
+                onClick={() => setTab("settings")}
+              >
+                Settings
+              </button>
+            </div>
+
+            <div className="pause-content">
+              {tab === "menu" ? (
+                <div className="console-zone pause-menu-zone">
+                  <p className="pause-tagline">
+                    Match keeps running on the server — resume any time.
+                  </p>
+                  <div className="pause-actions">
+                    <DeckButton label="Resume" variant="go" onClick={() => setOpen(false)} />
+                    <DeckButton
+                      label="Leave Match"
+                      variant="danger"
+                      onClick={() => {
+                        setOpen(false);
+                        onLeave();
+                      }}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <SettingsPanel />
+              )}
+            </div>
+
+            <div className="console-action-strip pause-strip">
+              <span className="action-stencil" aria-hidden>ESC TO RESUME</span>
+              <span className="pause-strip-led" aria-hidden />
+            </div>
           </div>
         </div>
 
-        {tab === "menu" ? (
-          <>
-            <p className="tagline">
-              The match keeps running on the server — you can resume any time.
-            </p>
-            <SfxButton className="primary-btn" onClick={() => setOpen(false)}>
-              Resume
-            </SfxButton>
-            <SfxButton
-              className="danger-btn"
-              onClick={() => {
-                setOpen(false);
-                onLeave();
-              }}
-            >
-              Leave match
-            </SfxButton>
-          </>
-        ) : (
-          <SettingsPanel />
-        )}
-
-        <p
-          style={{
-            color: "var(--ink-faint)",
-            fontSize: 11,
-            marginTop: 14,
-            textAlign: "center",
-          }}
-        >
-          Press ESC or click outside to close.
-        </p>
+        <div className="console-rack-feet" aria-hidden>
+          <span className="console-rack-foot" />
+          <span className="console-rack-foot" />
+        </div>
       </div>
     </div>
   );

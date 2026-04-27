@@ -12,9 +12,10 @@ interface Props {
 }
 
 /**
- * Scoreboard top-left + compact HP/Fuel readout top-right. The power bar
- * lives in the drag overlay inside Phaser, and the weapon selection is in
- * the bottom tray — so the rest of the screen stays quiet.
+ * Cockpit instrument cluster:
+ *   • top-left   — riveted "ROSTER" placard (scoreboard)
+ *   • top-right  — driver's panel with HP + FUEL analog gauges + nameplate
+ *   • top-center — team strength placards (when team mode is on)
  */
 export function HudOverlay({
   self,
@@ -40,128 +41,114 @@ export function HudOverlay({
   return (
     <>
       {teamPills.length > 0 && (
-        <div
-          style={{
-            position: "fixed",
-            top: 58,
-            left: "50%",
-            transform: "translateX(-50%)",
-            display: "flex",
-            flexWrap: "wrap",
-            justifyContent: "center",
-            gap: 8,
-            pointerEvents: "none",
-            zIndex: 5,
-            maxWidth: "min(620px, 90vw)",
-          }}
-        >
+        <div className="hud-team-strip">
           {teamPills.map(({ team, alive }) => {
             const tint = teamTint(team);
+            const dead = alive <= 0;
             return (
               <div
                 key={team}
-                style={{
-                  padding: "4px 12px",
-                  borderRadius: 999,
-                  background: `${tint}22`,
-                  border: `1px solid ${tint}`,
-                  color: tint,
-                  fontFamily: "var(--font-mono)",
-                  fontSize: 12,
-                  letterSpacing: "0.12em",
-                  opacity: alive > 0 ? 1 : 0.45,
-                  textDecoration: alive > 0 ? "none" : "line-through",
-                }}
+                className={`hud-team-placard ${dead ? "dead" : ""}`}
+                style={{ borderColor: tint, color: tint }}
               >
-                {teamLabel(team).toUpperCase()} · {alive} ALIVE
+                <span className="hud-team-name">{teamLabel(team).toUpperCase()}</span>
+                <span className="hud-team-count">{alive}</span>
               </div>
             );
           })}
         </div>
       )}
-      <div className="hud-overlay" style={{ left: 16, top: 16, minWidth: 220 }}>
-        <div className="label" style={{ marginBottom: 8 }}>Scoreboard</div>
-        {scoreboard.map((p) => (
-          <div
-            key={p.id}
-            style={{
-              display: "flex",
-              gap: 8,
-              alignItems: "center",
-              opacity: p.dead ? 0.4 : 1,
-              padding: "2px 0",
-            }}
-          >
-            <span
-              style={{
-                display: "inline-block",
-                width: 10,
-                height: 10,
-                borderRadius: 2,
-                background: `#${p.color.toString(16).padStart(6, "0")}`,
-                boxShadow: p.id === currentTurnId ? "0 0 8px currentColor" : undefined,
-              }}
-            />
-            <span
-              style={{
-                flex: 1,
-                color: p.dead ? "var(--ink-faint)" : "var(--ink)",
-                fontSize: 13,
-              }}
-            >
-              {p.name}
-              {p.bot ? <span style={{ color: "var(--ink-faint)" }}> · bot</span> : ""}
-            </span>
-            <span className="mono" style={{ fontSize: 11 }}>
-              {Math.max(0, Math.round(p.hp))}
-            </span>
-            <span className="mono" style={{ fontSize: 11, color: "var(--amber)" }}>
-              ×{p.kills}
-            </span>
-          </div>
-        ))}
+
+      <div className="hud-overlay hud-roster" data-corner="tl">
+        <span className="hud-rivet tl" />
+        <span className="hud-rivet tr" />
+        <span className="hud-rivet bl" />
+        <span className="hud-rivet br" />
+        <div className="hud-stencil hud-roster-label">Roster</div>
+        <div className="hud-roster-rows">
+          {scoreboard.map((p) => (
+            <div key={p.id} className={`hud-roster-row ${p.dead ? "dead" : ""}`}>
+              <span
+                className={`hud-roster-pip ${p.id === currentTurnId ? "active" : ""}`}
+                style={{ background: `#${p.color.toString(16).padStart(6, "0")}` }}
+              />
+              <span className="hud-roster-name">
+                {p.name}
+                {p.bot ? <span className="hud-roster-tag"> · BOT</span> : ""}
+              </span>
+              <span className="hud-roster-hp">{Math.max(0, Math.round(p.hp))}</span>
+              <span className="hud-roster-kills">×{p.kills}</span>
+            </div>
+          ))}
+        </div>
       </div>
 
       {self && !self.dead && (
-        <div
-          className="hud-overlay"
-          style={{ right: 16, top: 16, minWidth: 220 }}
-        >
-          <div className="label" style={{ marginBottom: 4 }}>
-            {self.name}
+        <div className="hud-overlay hud-driver" data-corner="tr">
+          <span className="hud-rivet tl" />
+          <span className="hud-rivet tr" />
+          <span className="hud-rivet bl" />
+          <span className="hud-rivet br" />
+          <div className="hud-driver-plate">
+            <span className="hud-driver-callsign">{self.name}</span>
+            <span className="hud-driver-sub">DRIVER · CH 1</span>
           </div>
-          <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11 }}>
-            <span className="mono" style={{ color: "var(--danger)" }}>HP</span>
-            <span className="mono">
-              {Math.round(self.hp)} / {TANK.MAX_HP}
-            </span>
-          </div>
-          <div className="hud-bar">
-            <div
-              style={{
-                width: `${(self.hp / TANK.MAX_HP) * 100}%`,
-                background: "var(--danger)",
-              }}
+          <div className="hud-instruments">
+            <Gauge
+              variant="hp"
+              label="HP"
+              value={self.hp}
+              max={TANK.MAX_HP}
             />
-          </div>
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              fontSize: 11,
-              marginTop: 6,
-            }}
-          >
-            <span className="mono" style={{ color: "var(--ok)" }}>FUEL</span>
-            <span className="mono">{Math.round(self.fuel)}</span>
-          </div>
-          <div className="hud-bar">
-            <div
-              style={{ width: `${(self.fuel / 100) * 100}%`, background: "var(--ok)" }}
+            <Gauge
+              variant="fuel"
+              label="FUEL"
+              value={self.fuel}
+              max={100}
             />
           </div>
         </div>
       )}
     </>
+  );
+}
+
+function Gauge({
+  variant,
+  label,
+  value,
+  max,
+}: {
+  variant: "hp" | "fuel";
+  label: string;
+  value: number;
+  max: number;
+}): JSX.Element {
+  const frac = Math.max(0, Math.min(1, value / max));
+  const angle = -135 + frac * 270;
+  return (
+    <div className={`hud-gauge ${variant}`}>
+      <div className="hud-gauge-face">
+        <div className="hud-gauge-ticks">
+          {Array.from({ length: 11 }).map((_, i) => {
+            const a = -135 + (i / 10) * 270;
+            return (
+              <span
+                key={i}
+                className={`hud-gauge-tick ${i % 5 === 0 ? "major" : ""}`}
+                style={{ transform: `translateX(-50%) rotate(${a}deg)` }}
+              />
+            );
+          })}
+        </div>
+        <div className="hud-gauge-readout">{Math.round(value)}</div>
+        <div
+          className="hud-gauge-needle"
+          style={{ transform: `translate(-50%, -100%) rotate(${angle}deg)` }}
+        />
+        <div className="hud-gauge-cap" />
+        <div className="hud-gauge-label">{label}</div>
+      </div>
+    </div>
   );
 }

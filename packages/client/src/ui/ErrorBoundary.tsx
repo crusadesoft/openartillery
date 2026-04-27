@@ -22,6 +22,7 @@ export class ErrorBoundary extends Component<Props, State> {
       return (
         <div className="screen">
           <div className="center-card">
+            <span className="center-card-stamp">Fault</span>
             <h1>Something broke</h1>
             <p className="tagline">
               The client hit an unrecoverable error. Try refreshing, or go home.
@@ -29,9 +30,6 @@ export class ErrorBoundary extends Component<Props, State> {
             <pre
               style={{
                 whiteSpace: "pre-wrap",
-                background: "rgba(0,0,0,0.3)",
-                padding: 10,
-                borderRadius: 6,
                 fontSize: 11,
                 maxHeight: 200,
                 overflow: "auto",
