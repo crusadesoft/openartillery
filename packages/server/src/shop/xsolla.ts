@@ -36,19 +36,17 @@ export async function createCheckout(
   }
 
   const externalId = crypto.randomBytes(16).toString("hex");
-  // The In-Game Store catalog endpoint expects items keyed by SKU + quantity.
-  // Pay Station then renders the cart from the catalog entries — using the
-  // legacy `/merchant/v2/.../token` endpoint with `purchase.virtual_items`
-  // creates a token but Pay Station can't surface the items.
+  // The In-Game Store v3 catalog endpoint expects items keyed by SKU +
+  // quantity. Pay Station renders the cart from the catalog entries.
+  // `sandbox` is a top-level boolean (not `settings.mode`); when true the
+  // resulting token can only be opened via sandbox-secure.xsolla.com.
   const body = {
     user: {
       id: { value: userId },
       name: { value: username },
       country: { value: "US", allow_modify: true },
     },
-    // The v3 admin endpoint already takes project_id in the URL and rejects
-    // it in the body. Sandbox vs live mode is inferred from the project's
-    // current state in Publisher Account, not a per-token flag.
+    sandbox: config.XSOLLA_SANDBOX,
     settings: {
       external_id: externalId,
       currency: "USD",
@@ -81,13 +79,13 @@ export async function createCheckout(
   }
   const json = (await res.json()) as { token?: string; order_id?: number };
   if (!json.token) throw new Error("xsolla token missing");
-  // The In-Game Store v3 token endpoint always routes through
-  // secure.xsolla.com — sandbox vs. live is encoded in the token itself
-  // based on the project's mode in Publisher Account, not the host.
-  return {
-    url: `https://secure.xsolla.com/paystation4/?token=${json.token}`,
-    externalId,
-  };
+  // Sandbox tokens can only be opened on sandbox-secure.xsolla.com; live
+  // tokens only work on secure.xsolla.com. The endpoint routes don't
+  // accept a token from the wrong environment.
+  const base = config.XSOLLA_SANDBOX
+    ? "https://sandbox-secure.xsolla.com/paystation4/"
+    : "https://secure.xsolla.com/paystation4/";
+  return { url: `${base}?token=${json.token}`, externalId };
 }
 
 /**
