@@ -37,6 +37,11 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+    # Anything in .env (XSOLLA_*, SHOP_DEV_MODE, etc.) gets forwarded
+    # to the container without us having to enumerate it here. The
+    # `environment:` block below overrides any duplicates.
+    env_file:
+      - .env
     environment:
       NODE_ENV: production
       PORT: 2567
