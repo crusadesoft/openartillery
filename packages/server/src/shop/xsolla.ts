@@ -81,10 +81,13 @@ export async function createCheckout(
   }
   const json = (await res.json()) as { token?: string; order_id?: number };
   if (!json.token) throw new Error("xsolla token missing");
-  const base = config.XSOLLA_SANDBOX
-    ? "https://sandbox-secure.xsolla.com/paystation4/"
-    : "https://secure.xsolla.com/paystation4/";
-  return { url: `${base}?token=${json.token}`, externalId };
+  // The In-Game Store v3 token endpoint always routes through
+  // secure.xsolla.com — sandbox vs. live is encoded in the token itself
+  // based on the project's mode in Publisher Account, not the host.
+  return {
+    url: `https://secure.xsolla.com/paystation4/?token=${json.token}`,
+    externalId,
+  };
 }
 
 /**
