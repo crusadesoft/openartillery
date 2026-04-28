@@ -1,0 +1,128 @@
+<!--
+  "Urban Hex" tank — speeder hull (W=34, no glacis, no skirt, 4 wheels) + twin turret.
+  Steel grey #6a6e72 with hex camo, gold accent.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 -7 34 23.84"
+     width="170" height="119">
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="8.84" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8f9499"/>
+      <stop offset="0.55" stop-color="#6a6e72"/>
+      <stop offset="1" stop-color="#3a3c3e"/>
+    </linearGradient>
+    <linearGradient id="turret" x1="0" y1="-5.61" x2="0" y2="1.87" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#999fa5"/>
+      <stop offset="0.6" stop-color="#72767b"/>
+      <stop offset="1" stop-color="#3a3c3e"/>
+    </linearGradient>
+    <radialGradient id="wheel" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#6a6e7a"/>
+      <stop offset="0.7" stop-color="#3a3d47"/>
+      <stop offset="1" stop-color="#14161c"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Treads -->
+  <rect x="0" y="8.84" width="34" height="8" fill="#0b0c10"/>
+  <g fill="#1c1e26">
+    <rect x="2"  y="10.84" width="2" height="4"/><rect x="6"  y="10.84" width="2" height="4"/>
+    <rect x="10" y="10.84" width="2" height="4"/><rect x="14" y="10.84" width="2" height="4"/>
+    <rect x="18" y="10.84" width="2" height="4"/><rect x="22" y="10.84" width="2" height="4"/>
+    <rect x="26" y="10.84" width="2" height="4"/><rect x="30" y="10.84" width="2" height="4"/>
+  </g>
+  <rect x="0" y="14.84" width="34" height="2" fill="rgba(0,0,0,0.6)"/>
+  <rect x="4" y="9.84" width="26" height="1" fill="rgba(255,255,255,0.18)"/>
+
+  <!-- Wheels (4) -->
+  <g><circle cx="2.72"  cy="12.84" r="3.6" fill="url(#wheel)"/>
+     <circle cx="12.24" cy="12.84" r="3.6" fill="url(#wheel)"/>
+     <circle cx="21.76" cy="12.84" r="3.6" fill="url(#wheel)"/>
+     <circle cx="31.28" cy="12.84" r="3.6" fill="url(#wheel)"/></g>
+  <g fill="#0a0b10">
+    <circle cx="2.72"  cy="12.84" r="1.62"/><circle cx="12.24" cy="12.84" r="1.62"/>
+    <circle cx="21.76" cy="12.84" r="1.62"/><circle cx="31.28" cy="12.84" r="1.62"/>
+  </g>
+  <g fill="rgba(255,255,255,0.4)">
+    <circle cx="2"     cy="12.12" r="0.648"/><circle cx="11.52" cy="12.12" r="0.648"/>
+    <circle cx="21.04" cy="12.12" r="0.648"/><circle cx="30.56" cy="12.12" r="0.648"/>
+  </g>
+
+  <!-- Hull silhouette (no glacis) -->
+  <path d="M 4 2 Q 4 0 8 0 L 30 0 L 30 8.84 L 4 8.84 Z" fill="url(#hull)"/>
+
+  <!-- Hex camo pattern (offset hex grid, ~half-filled) -->
+  <g opacity="0.55" fill="#3e4146">
+    <polygon points="6,1 7.36,1.8 7.36,3.4 6,4.2 4.64,3.4 4.64,1.8"/>
+    <polygon points="11.5,2.6 12.86,3.4 12.86,5 11.5,5.8 10.14,5 10.14,3.4"/>
+    <polygon points="14,1 15.36,1.8 15.36,3.4 14,4.2 12.64,3.4 12.64,1.8"/>
+    <polygon points="19.5,2.6 20.86,3.4 20.86,5 19.5,5.8 18.14,5 18.14,3.4"/>
+    <polygon points="22,1 23.36,1.8 23.36,3.4 22,4.2 20.64,3.4 20.64,1.8"/>
+    <polygon points="9,5.5 10.36,6.3 10.36,7.9 9,8.7 7.64,7.9 7.64,6.3"/>
+    <polygon points="17,5.5 18.36,6.3 18.36,7.9 17,8.7 15.64,7.9 15.64,6.3"/>
+    <polygon points="25,5.5 26.36,6.3 26.36,7.9 25,8.7 23.64,7.9 23.64,6.3"/>
+  </g>
+
+  <!-- Top highlight + bottom shadow + seam + accent + rivets -->
+  <rect x="6" y="0" width="22" height="0.204" fill="#a4aab0"/>
+  <rect x="4" y="6.84" width="26" height="2" fill="rgba(0,0,0,0.45)"/>
+  <rect x="6" y="3.978" width="22" height="0.17" fill="rgba(0,0,0,0.35)"/>
+  <rect x="8" y="5.481" width="18" height="0.272" fill="#d4a44c"/>
+  <rect x="8" y="5.753" width="18" height="0.102" fill="rgba(0,0,0,0.35)"/>
+  <g fill="rgba(0,0,0,0.55)">
+    <rect x="10" y="2" width="0.272" height="0.272"/>
+    <rect x="18" y="2" width="0.272" height="0.272"/>
+    <rect x="26" y="2" width="0.272" height="0.272"/>
+    <rect x="10" y="4.978" width="0.245" height="0.245"/>
+    <rect x="18" y="4.978" width="0.245" height="0.245"/>
+    <rect x="26" y="4.978" width="0.245" height="0.245"/>
+  </g>
+
+  <!-- Hatch -->
+  <circle cx="14.28" cy="1.945" r="2" fill="rgba(0,0,0,0.4)"/>
+  <circle cx="14.28" cy="1.945" r="2" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.12"/>
+
+  <!-- Antenna -->
+  <line x1="10" y1="0" x2="10" y2="-3.978" stroke="#0a0a10" stroke-width="0.272"/>
+
+  <!-- Stowage -->
+  <rect x="4" y="4" width="6" height="4.862" fill="rgba(55,50,40,0.9)"/>
+  <rect x="4" y="4" width="6" height="4.862" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.4"/>
+  <rect x="4" y="6.431" width="6" height="0.8" fill="rgba(0,0,0,0.5)"/>
+
+  <!-- Twin turret (ellipse) -->
+  <ellipse cx="14.96" cy="-1.87" rx="6.8" ry="3.74" fill="url(#turret)"/>
+
+  <!-- Twin turret port circles (left/top + left/bottom of cy) -->
+  <g fill="rgba(0,0,0,0.92)">
+    <circle cx="18.768" cy="-3.5158" r="1.197"/>
+    <circle cx="18.768" cy="-0.2242" r="1.197"/>
+  </g>
+  <g fill="none" stroke="rgba(0,0,0,0.7)" stroke-width="0.13">
+    <circle cx="18.768" cy="-3.5158" r="1.197"/>
+    <circle cx="18.768" cy="-0.2242" r="1.197"/>
+  </g>
+
+  <!-- Turret highlight + base shadow + bolts (10) -->
+  <ellipse cx="12.92" cy="-3.366" rx="3.808" ry="1.87" fill="rgba(255,255,255,0.35)"/>
+  <ellipse cx="14.96" cy="0.749" rx="5.168" ry="1.3464" fill="rgba(0,0,0,0.35)"/>
+  <g fill="rgba(0,0,0,0.55)">
+    <circle cx="19.46" cy="-1.87" r="0.238"/>
+    <circle cx="18.84" cy="-0.39" r="0.238"/>
+    <circle cx="17.27" cy="0.51" r="0.238"/>
+    <circle cx="15.05" cy="0.86" r="0.238"/>
+    <circle cx="12.79" cy="0.51" r="0.238"/>
+    <circle cx="10.46" cy="-1.87" r="0.238"/>
+    <circle cx="11.08" cy="-3.35" r="0.238"/>
+    <circle cx="12.65" cy="-4.25" r="0.238"/>
+    <circle cx="14.87" cy="-4.6" r="0.238"/>
+    <circle cx="17.13" cy="-4.25" r="0.238"/>
+  </g>
+
+  <!-- Periscope -->
+  <rect x="13.94" y="-5.236" width="2.04" height="0.748" fill="rgba(15,16,22,0.95)"/>
+  <rect x="14.28" y="-4.236" width="1.36" height="0.238" fill="rgba(130,170,220,0.75)"/>
+
+  <!-- Side mount -->
+  <rect x="19.312" y="-2.414" width="1.088" height="1.02" fill="rgba(22,22,28,0.95)"/>
+</svg>

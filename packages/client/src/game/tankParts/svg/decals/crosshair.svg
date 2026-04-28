@@ -1,0 +1,12 @@
+<!--
+  Crosshair decal — outer ring + crosshairs + center dot.
+  Unit cell viewBox "-1 -1 2 2".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 2 2" width="80" height="80">
+  <g fill="none" stroke="rgba(240,234,220,0.92)" stroke-width="0.08">
+    <circle cx="0" cy="0" r="1"/>
+    <line x1="-1" y1="0" x2="1" y2="0"/>
+    <line x1="0" y1="-1" x2="0" y2="1"/>
+  </g>
+  <circle cx="0" cy="0" r="0.15" fill="rgba(240,234,220,0.92)"/>
+</svg>

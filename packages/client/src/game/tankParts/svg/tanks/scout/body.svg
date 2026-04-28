@@ -1,0 +1,110 @@
+<!--
+  "Scout" tank — scout hull (W=36, no glacis, no skirt) + box turret.
+  Olive #4a5520 with stripes camo, brown-yellow accent.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 -9 36 27.08"
+     width="180" height="135">
+  <defs>
+    <linearGradient id="hull" x1="0" y1="0" x2="0" y2="10.08" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#63722b"/>
+      <stop offset="0.55" stop-color="#4a5520"/>
+      <stop offset="1" stop-color="#282e11"/>
+    </linearGradient>
+    <linearGradient id="turret" x1="0" y1="-6.48" x2="0" y2="2.16" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6b7b2e"/>
+      <stop offset="0.6" stop-color="#4f5b22"/>
+      <stop offset="1" stop-color="#282e11"/>
+    </linearGradient>
+    <radialGradient id="wheel" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0" stop-color="#6a6e7a"/>
+      <stop offset="0.7" stop-color="#3a3d47"/>
+      <stop offset="1" stop-color="#14161c"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Treads -->
+  <rect x="0" y="10.08" width="36" height="8" fill="#0b0c10"/>
+  <g fill="#1c1e26">
+    <rect x="2" y="12.08" width="2" height="4"/><rect x="6" y="12.08" width="2" height="4"/>
+    <rect x="10" y="12.08" width="2" height="4"/><rect x="14" y="12.08" width="2" height="4"/>
+    <rect x="18" y="12.08" width="2" height="4"/><rect x="22" y="12.08" width="2" height="4"/>
+    <rect x="26" y="12.08" width="2" height="4"/><rect x="30" y="12.08" width="2" height="4"/>
+  </g>
+  <rect x="0" y="16.08" width="36" height="2" fill="rgba(0,0,0,0.6)"/>
+  <rect x="4" y="11.08" width="28" height="1" fill="rgba(255,255,255,0.18)"/>
+
+  <!-- Wheels (4) -->
+  <g><circle cx="2.88" cy="14.08" r="3.6" fill="url(#wheel)"/>
+     <circle cx="12.96" cy="14.08" r="3.6" fill="url(#wheel)"/>
+     <circle cx="23.04" cy="14.08" r="3.6" fill="url(#wheel)"/>
+     <circle cx="33.12" cy="14.08" r="3.6" fill="url(#wheel)"/></g>
+  <g fill="#0a0b10">
+    <circle cx="2.88" cy="14.08" r="1.62"/><circle cx="12.96" cy="14.08" r="1.62"/>
+    <circle cx="23.04" cy="14.08" r="1.62"/><circle cx="33.12" cy="14.08" r="1.62"/>
+  </g>
+  <g fill="rgba(255,255,255,0.4)">
+    <circle cx="2.16" cy="13.36" r="0.648"/><circle cx="12.24" cy="13.36" r="0.648"/>
+    <circle cx="22.32" cy="13.36" r="0.648"/><circle cx="32.4" cy="13.36" r="0.648"/>
+  </g>
+
+  <!-- Hull silhouette -->
+  <path d="M 4 2 Q 4 0 8 0 L 32 0 L 32 10.08 L 4 10.08 Z" fill="url(#hull)"/>
+
+  <!-- Stripes pattern -->
+  <g opacity="0.55" fill="#2e3a14">
+    <rect x="4" y="2.5" width="28" height="2"/>
+    <rect x="4" y="6.5" width="28" height="2"/>
+  </g>
+
+  <!-- Top highlight + bottom shadow + seam + accent + rivets -->
+  <rect x="6" y="0" width="24" height="0.216" fill="#728331"/>
+  <rect x="4" y="8.08" width="28" height="2" fill="rgba(0,0,0,0.45)"/>
+  <rect x="6" y="4.536" width="24" height="0.18" fill="rgba(0,0,0,0.35)"/>
+  <rect x="8" y="6.25" width="20" height="0.288" fill="#6e6a35"/>
+  <rect x="8" y="6.538" width="20" height="0.108" fill="rgba(0,0,0,0.35)"/>
+  <g fill="rgba(0,0,0,0.55)">
+    <rect x="10" y="2" width="0.288" height="0.288"/>
+    <rect x="18" y="2" width="0.288" height="0.288"/>
+    <rect x="26" y="2" width="0.288" height="0.288"/>
+    <rect x="10" y="5.536" width="0.259" height="0.259"/>
+    <rect x="18" y="5.536" width="0.259" height="0.259"/>
+    <rect x="26" y="5.536" width="0.259" height="0.259"/>
+  </g>
+
+  <!-- Hatch -->
+  <circle cx="15.12" cy="2.218" r="2" fill="rgba(0,0,0,0.4)"/>
+  <circle cx="15.12" cy="2.218" r="2" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.13"/>
+
+  <!-- Antenna -->
+  <line x1="10" y1="0" x2="10" y2="-4.536" stroke="#0a0a10" stroke-width="0.288"/>
+
+  <!-- Stowage -->
+  <rect x="4" y="4" width="6" height="5.544" fill="rgba(55,50,40,0.9)"/>
+  <rect x="4" y="4" width="6" height="5.544" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.45"/>
+  <rect x="4" y="6.772" width="6" height="0.8" fill="rgba(0,0,0,0.5)"/>
+
+  <!-- Box turret -->
+  <path d="M 11.36 -4.104 L 12.276 -4.104 L 12.276 -8.856 L 19.404 -8.856 L 19.404 -4.104 L 20.32 -4.104 Q 22.32 -4.104 22.32 -2.104 L 22.32 1.728 L 9.36 1.728 L 9.36 -2.104 Q 9.36 -4.104 11.36 -4.104 Z"
+        fill="url(#turret)"/>
+
+  <!-- Box turret details: slit + dots -->
+  <rect x="11.952" y="-3.024" width="7.776" height="0.69" fill="rgba(0,0,0,0.55)"/>
+  <g fill="rgba(0,0,0,0.55)">
+    <circle cx="11.952" cy="0.259" r="0.8"/>
+    <circle cx="14.544" cy="0.259" r="0.8"/>
+    <circle cx="17.136" cy="0.259" r="0.8"/>
+    <circle cx="19.728" cy="0.259" r="0.8"/>
+  </g>
+
+  <!-- Turret highlight + base shadow -->
+  <ellipse cx="13.896" cy="-3.888" rx="3.6288" ry="2.16" fill="rgba(255,255,255,0.35)"/>
+  <ellipse cx="15.84" cy="0.864" rx="4.9248" ry="1.5552" fill="rgba(0,0,0,0.35)"/>
+
+  <!-- Periscope -->
+  <rect x="14.76" y="-6.048" width="2.16" height="0.792" fill="rgba(15,16,22,0.95)"/>
+  <rect x="15.12" y="-5.048" width="1.44" height="0.252" fill="rgba(130,170,220,0.75)"/>
+
+  <!-- Side mount -->
+  <rect x="19.987" y="-2.736" width="1.152" height="1.08" fill="rgba(22,22,28,0.95)"/>
+</svg>

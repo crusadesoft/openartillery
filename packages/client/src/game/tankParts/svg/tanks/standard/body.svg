@@ -1,0 +1,152 @@
+<!--
+  "Standard" tank — fully-painted sprite (heavy hull + standard turret).
+  Colors are baked: olive-drab primary (#3a4a22), brown-yellow accent
+  (#8a6a1a), as defined in `cosmetics.ts` for the `standard` preset.
+
+  Coordinate system: x=0 is hull-left, y=0 is hull-top.
+  ViewBox extends y∈[-8, 24.32] to include the turret (top at y≈-7.92)
+  and the antenna (top at y≈-7.34) above the hull, and the tread belt
+  (y∈[16.32, 24.32]) below it.
+
+  The renderer rasterizes this SVG once at boot and `drawImage`s it onto
+  the destination canvas at the requested hull-width. Barrel and decal
+  remain separate sprites (barrel rotates per-aim; decal is per-player).
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 -8 48 32.32"
+     width="240" height="161.6">
+  <defs>
+    <linearGradient id="hullGrad" x1="0" y1="0" x2="0" y2="16.32" gradientUnits="userSpaceOnUse">
+      <stop offset="0"    stop-color="#4e642e"/>
+      <stop offset="0.55" stop-color="#3a4a22"/>
+      <stop offset="1"    stop-color="#202912"/>
+    </linearGradient>
+    <linearGradient id="turretGrad" x1="0" y1="-7.92" x2="0" y2="2.64" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#546b31"/>
+      <stop offset="0.6" stop-color="#3e5024"/>
+      <stop offset="1"   stop-color="#202912"/>
+    </linearGradient>
+    <radialGradient id="wheelGrad" cx="0.35" cy="0.35" r="0.7">
+      <stop offset="0"   stop-color="#6a6e7a"/>
+      <stop offset="0.7" stop-color="#3a3d47"/>
+      <stop offset="1"   stop-color="#14161c"/>
+    </radialGradient>
+  </defs>
+
+  <!-- ───── Tread belt ───── -->
+  <rect x="0" y="16.32" width="48" height="8" fill="#0b0c10"/>
+  <g fill="#1c1e26">
+    <rect x="2"  y="18.32" width="2" height="4"/>
+    <rect x="6"  y="18.32" width="2" height="4"/>
+    <rect x="10" y="18.32" width="2" height="4"/>
+    <rect x="14" y="18.32" width="2" height="4"/>
+    <rect x="18" y="18.32" width="2" height="4"/>
+    <rect x="22" y="18.32" width="2" height="4"/>
+    <rect x="26" y="18.32" width="2" height="4"/>
+    <rect x="30" y="18.32" width="2" height="4"/>
+    <rect x="34" y="18.32" width="2" height="4"/>
+    <rect x="38" y="18.32" width="2" height="4"/>
+    <rect x="42" y="18.32" width="2" height="4"/>
+  </g>
+  <rect x="0" y="22.32" width="48" height="2" fill="rgba(0,0,0,0.6)"/>
+  <rect x="4" y="17.32" width="40" height="1" fill="rgba(255,255,255,0.18)"/>
+
+  <!-- ───── Road wheels (6) ───── -->
+  <g>
+    <circle cx="3.84"   cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+    <circle cx="11.904" cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+    <circle cx="19.968" cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+    <circle cx="28.032" cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+    <circle cx="36.096" cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+    <circle cx="44.16"  cy="20.32" r="3.6" fill="url(#wheelGrad)"/>
+  </g>
+  <g fill="#0a0b10">
+    <circle cx="3.84"   cy="20.32" r="1.62"/>
+    <circle cx="11.904" cy="20.32" r="1.62"/>
+    <circle cx="19.968" cy="20.32" r="1.62"/>
+    <circle cx="28.032" cy="20.32" r="1.62"/>
+    <circle cx="36.096" cy="20.32" r="1.62"/>
+    <circle cx="44.16"  cy="20.32" r="1.62"/>
+  </g>
+  <g fill="rgba(255,255,255,0.4)">
+    <circle cx="3.12"   cy="19.6" r="0.648"/>
+    <circle cx="11.184" cy="19.6" r="0.648"/>
+    <circle cx="19.248" cy="19.6" r="0.648"/>
+    <circle cx="27.312" cy="19.6" r="0.648"/>
+    <circle cx="35.376" cy="19.6" r="0.648"/>
+    <circle cx="43.44"  cy="19.6" r="0.648"/>
+  </g>
+
+  <!-- ───── Hull silhouette ───── -->
+  <path d="M 4 2 Q 4 0 8 0 L 37.84 0 L 44 16.32 L 4 16.32 Z" fill="url(#hullGrad)"/>
+
+  <!-- Glacis facet -->
+  <path d="M 37.84 0 L 44 16.32 L 40.736 16.32 L 33.24 0 Z" fill="#293518"/>
+
+  <!-- Top edge highlight -->
+  <rect x="6" y="0" width="33.84" height="0.288" fill="#5a7335"/>
+
+  <!-- Bottom shadow -->
+  <rect x="4" y="14.32" width="40" height="2" fill="rgba(0,0,0,0.45)"/>
+
+  <!-- Mid seam -->
+  <rect x="6" y="7.344" width="33.84" height="0.24" fill="rgba(0,0,0,0.35)"/>
+
+  <!-- Accent stripe + drop shadow -->
+  <rect x="8" y="10.118" width="29.84" height="0.384" fill="#8a6a1a"/>
+  <rect x="8" y="10.502" width="29.84" height="0.144" fill="rgba(0,0,0,0.35)"/>
+
+  <!-- Rivets -->
+  <g fill="rgba(0,0,0,0.55)">
+    <rect x="10" y="2" width="0.384" height="0.384"/>
+    <rect x="18" y="2" width="0.384" height="0.384"/>
+    <rect x="26" y="2" width="0.384" height="0.384"/>
+    <rect x="34" y="2" width="0.384" height="0.384"/>
+    <rect x="10" y="9.344" width="0.346" height="0.346"/>
+    <rect x="18" y="9.344" width="0.346" height="0.346"/>
+    <rect x="26" y="9.344" width="0.346" height="0.346"/>
+    <rect x="34" y="9.344" width="0.346" height="0.346"/>
+  </g>
+
+  <!-- Hatch -->
+  <circle cx="20.16" cy="3.59" r="1.2" fill="rgba(0,0,0,0.4)"/>
+  <circle cx="20.16" cy="3.59" r="1.2" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="0.18"/>
+
+  <!-- Antenna -->
+  <line x1="10" y1="0" x2="10" y2="-7.344" stroke="#0a0a10" stroke-width="0.4"/>
+
+  <!-- Rear stowage box -->
+  <rect x="4" y="4" width="2.88" height="8.976" fill="rgba(55,50,40,0.9)"/>
+  <rect x="4" y="4" width="2.88" height="8.976" fill="none" stroke="rgba(255,255,255,0.25)" stroke-width="0.6"/>
+  <rect x="4" y="8.488" width="2.88" height="0.8" fill="rgba(0,0,0,0.5)"/>
+
+  <!-- ───── Standard turret (ellipse, sits above hull) ───── -->
+  <ellipse cx="21.12" cy="-2.64" rx="8.16" ry="5.28" fill="url(#turretGrad)"/>
+
+  <!-- Turret highlight (top-left sheen) -->
+  <ellipse cx="18.672" cy="-4.752" rx="4.5696" ry="2.64" fill="rgba(255,255,255,0.35)"/>
+
+  <!-- Turret base shadow -->
+  <ellipse cx="21.12" cy="1.056" rx="6.2016" ry="1.9008" fill="rgba(0,0,0,0.35)"/>
+
+  <!-- Bolts around turret rim (10 bolts at radius 5.16, 2.78) -->
+  <g fill="rgba(0,0,0,0.55)">
+    <circle cx="26.28"  cy="-2.64"   r="0.336"/>
+    <circle cx="25.295" cy="-1.0067" r="0.336"/>
+    <circle cx="22.715" cy="0.005"   r="0.336"/>
+    <circle cx="19.525" cy="0.005"   r="0.336"/>
+    <circle cx="16.945" cy="-1.0067" r="0.336"/>
+    <circle cx="15.96"  cy="-2.64"   r="0.336"/>
+    <circle cx="16.945" cy="-4.2733" r="0.336"/>
+    <circle cx="19.525" cy="-5.285"  r="0.336"/>
+    <circle cx="22.715" cy="-5.285"  r="0.336"/>
+    <circle cx="25.295" cy="-4.2733" r="0.336"/>
+  </g>
+
+  <!-- Periscope (top of turret) -->
+  <rect x="19.68" y="-7.392" width="2.88" height="1.056" fill="rgba(15,16,22,0.95)"/>
+  <rect x="20.16" y="-6.392" width="1.92" height="0.336" fill="rgba(130,170,220,0.75)"/>
+
+  <!-- Side mount fitting -->
+  <rect x="26.3712" y="-3.408" width="1.536" height="1.44" fill="rgba(22,22,28,0.95)"/>
+</svg>

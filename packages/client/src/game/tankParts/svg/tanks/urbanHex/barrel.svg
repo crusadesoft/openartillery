@@ -1,0 +1,44 @@
+<!--
+  "Twin" barrel sprite — two parallel sub-tubes with a breech bridge.
+  Pivot at (0, 0). refW=48. Each sub-tube has thick=0.45*2.88=1.296, gap=0.864.
+  Sub-tube center offsets: ±(gap/2 + sub/2) = ±(0.432 + 0.648) = ±1.08.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="-1 -4 26 8"
+     width="130" height="40">
+  <defs>
+    <linearGradient id="gT" x1="0" y1="-1.728" x2="0" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#2d313e"/>
+      <stop offset="0.5" stop-color="#181a22"/>
+      <stop offset="1"   stop-color="#070810"/>
+    </linearGradient>
+    <linearGradient id="gB" x1="0" y1="0" x2="0" y2="1.728" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#2d313e"/>
+      <stop offset="0.5" stop-color="#181a22"/>
+      <stop offset="1"   stop-color="#070810"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Top sub-tube (y center = -1.08) -->
+  <rect x="-0.48" y="-3.728" width="1.68" height="5.296" fill="#15171e"/>
+  <rect x="-0.48" y="-1.728" width="1.68" height="1.296" fill="#2a2e3a"/>
+  <rect x="0" y="-1.728" width="24" height="1.296" fill="url(#gT)"/>
+  <rect x="2" y="-0.728" width="20" height="0.6" fill="rgba(255,255,255,0.2)"/>
+  <rect x="10.8" y="-1.728" width="1" height="1.296" fill="rgba(0,0,0,0.45)"/>
+  <rect x="18" y="-2.728" width="6" height="3.296" fill="#2b2f3c"/>
+  <rect x="18" y="-1.728" width="6" height="1" fill="rgba(255,255,255,0.28)"/>
+  <rect x="22" y="-1.428" width="2" height="0.696" fill="#000000"/>
+
+  <!-- Bottom sub-tube (y center = +1.08) -->
+  <rect x="-0.48" y="0.432" width="1.68" height="5.296" fill="#15171e"/>
+  <rect x="-0.48" y="0.432" width="1.68" height="1.296" fill="#2a2e3a"/>
+  <rect x="0" y="0.432" width="24" height="1.296" fill="url(#gB)"/>
+  <rect x="2" y="0.532" width="20" height="0.6" fill="rgba(255,255,255,0.2)"/>
+  <rect x="10.8" y="0.432" width="1" height="1.296" fill="rgba(0,0,0,0.45)"/>
+  <rect x="18" y="0.432" width="6" height="3.296" fill="#2b2f3c"/>
+  <rect x="18" y="0.432" width="6" height="1" fill="rgba(255,255,255,0.28)"/>
+  <rect x="22" y="0.732" width="2" height="0.696" fill="#000000"/>
+
+  <!-- Breech bridge linking both tubes -->
+  <rect x="-0.48" y="-2.44" width="2.16" height="4.88" fill="#15171e"/>
+</svg>

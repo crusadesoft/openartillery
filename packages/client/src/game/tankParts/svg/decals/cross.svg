@@ -1,0 +1,10 @@
+<!--
+  Cross decal — vertical bar + horizontal bar (Latin cross silhouette).
+  Unit cell viewBox "-1 -1 2 2".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 2 2" width="80" height="80">
+  <g fill="rgba(240,234,220,0.92)" stroke="rgba(0,0,0,0.7)" stroke-width="0.08">
+    <rect x="-0.11" y="-1" width="0.22" height="2"/>
+    <rect x="-0.6" y="-0.46" width="1.2" height="0.22"/>
+  </g>
+</svg>

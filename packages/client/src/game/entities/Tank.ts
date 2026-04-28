@@ -78,10 +78,7 @@ export class TankView {
     // every loadout field so two players with identical loadouts share
     // a single GPU texture.
     const hullMeta = ensureHullTexture(scene, player);
-    const barrelMeta = ensureBarrelTexture(
-      scene,
-      (player.barrelStyle || "standard") as BarrelStyle,
-    );
+    const barrelMeta = ensureBarrelTexture(scene, player);
 
     // Hull sprite — origin anchored at the hull centre so (0, 0) in the
     // container corresponds to the tank's physics centre.
@@ -304,10 +301,7 @@ export function getTankPreviewTextures(
 ): { hull: HullMeta; barrel: BarrelMeta } {
   return {
     hull: ensureHullTexture(scene, p),
-    barrel: ensureBarrelTexture(
-      scene,
-      (p.barrelStyle || "standard") as BarrelStyle,
-    ),
+    barrel: ensureBarrelTexture(scene, p),
   };
 }
 
@@ -360,12 +354,21 @@ function ensureHullTexture(scene: Phaser.Scene, p: Player): HullMeta {
   return meta;
 }
 
-function ensureBarrelTexture(scene: Phaser.Scene, style: BarrelStyle): BarrelMeta {
-  const key = `tank-barrel:${style}`;
+function ensureBarrelTexture(scene: Phaser.Scene, p: Player): BarrelMeta {
+  const body = (p.bodyStyle || "heavy") as BodyStyle;
+  const turret = (p.turretStyle || "standard") as TurretStyle;
+  const barrelStyle = (p.barrelStyle || "standard") as BarrelStyle;
+  const primary = (p.color & 0xffffff).toString(16).padStart(6, "0");
+  const key = `tank-barrel:${body}:${turret}:${primary}:${barrelStyle}`;
   const cached = barrelMetaCache.get(key);
   if (cached && scene.textures.exists(key)) return cached;
 
-  const result = renderBarrelCanvas(style);
+  const result = renderBarrelCanvas({
+    bodyStyle: body,
+    turretStyle: turret,
+    primary: `#${primary}`,
+    barrelStyle,
+  });
   scene.textures.addCanvas(key, result.canvas);
   const meta: BarrelMeta = { ...result, textureKey: key };
   barrelMetaCache.set(key, meta);

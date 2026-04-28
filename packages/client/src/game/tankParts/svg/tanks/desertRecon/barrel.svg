@@ -1,0 +1,25 @@
+<!--
+  "Heavy" barrel sprite — short, thick tube. Pivot at (0, 0).
+  Authored at refW=48 (hull width); 1 SVG unit ≈ 1 canvas px at native scale.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="-1 -4 22.5 8"
+     width="112.5" height="40">
+  <defs>
+    <linearGradient id="g" x1="0" y1="-1.56" x2="0" y2="1.56" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#2d313e"/>
+      <stop offset="0.5" stop-color="#181a22"/>
+      <stop offset="1"   stop-color="#070810"/>
+    </linearGradient>
+  </defs>
+  <rect x="-0.48" y="-3.56" width="1.68" height="7.12" fill="#15171e"/>
+  <rect x="-0.48" y="-1.56" width="1.68" height="3.12" fill="#2a2e3a"/>
+  <rect x="0" y="-1.56" width="20.16" height="3.12" fill="url(#g)"/>
+  <rect x="2" y="-0.56" width="16.16" height="0.6" fill="rgba(255,255,255,0.2)"/>
+  <rect x="9.072" y="-1.56" width="1" height="3.12" fill="rgba(0,0,0,0.45)"/>
+  <rect x="14.16" y="-2.56" width="6" height="5.12" fill="#2b2f3c"/>
+  <rect x="14.16" y="-1.56" width="6" height="1" fill="rgba(255,255,255,0.28)"/>
+  <rect x="15.36" y="-0.56" width="1" height="1.12" fill="#0a0b10"/>
+  <rect x="17.46" y="-0.56" width="1" height="1.12" fill="#0a0b10"/>
+  <rect x="18.16" y="-1.16" width="2" height="2.32" fill="#000000"/>
+</svg>

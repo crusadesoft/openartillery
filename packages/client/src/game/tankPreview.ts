@@ -22,6 +22,11 @@ import {
 import { drawBarrelAt } from "./tankParts/barrel";
 import { drawDecal } from "./tankParts/decals";
 import { drawPattern } from "./tankParts/patterns";
+import {
+  drawTankSprite,
+  drawTankBarrelSprite,
+  drawDecalSprite,
+} from "./tankParts/tankSprite";
 
 export type {
   BodyStyle,
@@ -97,139 +102,150 @@ export function drawTankPreview(
     ctx.translate(-x, 0);
   }
 
-  // ——— Tread belt ———
-  ctx.fillStyle = "#0b0c10";
-  ctx.fillRect(x, treadTop, W, treadH);
-  ctx.fillStyle = "#1c1e26";
-  const linkW = Math.max(2, W * 0.025);
-  for (let lx = x + 2; lx < x + W - 2; lx += linkW + 2) {
-    ctx.fillRect(lx, treadTop + 2, linkW, treadH - 4);
-  }
-  ctx.fillStyle = "rgba(0,0,0,0.6)";
-  ctx.fillRect(x, treadBot - 2, W, 2);
-  ctx.fillStyle = "rgba(255,255,255,0.18)";
-  ctx.fillRect(x + 4, treadTop + 1, W - 8, 1);
+  // Route any preset that has a painted SVG sprite through it. The
+  // sprite covers tread + hull + turret. Tank presets are detected
+  // by the (body, turret, primary) signature inside drawTankSprite.
+  const spriteHandled = drawTankSprite(
+    ctx, bodyStyle, turretStyle, primary, x, hullTop, W,
+  );
 
-  // ——— Road wheels ———
-  const wheelR = treadH * 0.45;
-  const wheelY = (treadTop + treadBot) / 2;
-  for (let i = 0; i < wheelCount; i++) {
-    const cx = x + W * 0.08 + (i * (W * 0.84)) / (wheelCount - 1);
-    const grad = ctx.createRadialGradient(cx - wheelR * 0.3, wheelY - wheelR * 0.3, 1, cx, wheelY, wheelR);
-    grad.addColorStop(0, "#6a6e7a");
-    grad.addColorStop(0.7, "#3a3d47");
-    grad.addColorStop(1, "#14161c");
-    ctx.fillStyle = grad;
-    ctx.beginPath(); ctx.arc(cx, wheelY, wheelR, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "#0a0b10";
-    ctx.beginPath(); ctx.arc(cx, wheelY, wheelR * 0.45, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.beginPath(); ctx.arc(cx - wheelR * 0.2, wheelY - wheelR * 0.2, wheelR * 0.18, 0, Math.PI * 2); ctx.fill();
-  }
-
-  if (hasSkirt) {
-    ctx.fillStyle = primary;
-    ctx.fillRect(x + 2, treadTop - treadH * 0.3, W - 4, treadH * 0.42);
-    ctx.fillStyle = "rgba(0,0,0,0.35)";
-    ctx.fillRect(x + 2, treadTop + 1, W - 4, 1);
-    ctx.fillStyle = "rgba(0,0,0,0.55)";
-    for (let lx = x + 6; lx < x + W - 6; lx += 12) ctx.fillRect(lx, treadTop - treadH * 0.22, 1.4, 1.4);
-  }
-
-  // ——— Hull ———
-  const hullGrad = ctx.createLinearGradient(0, hullTop, 0, hullBot);
-  hullGrad.addColorStop(0, shadeHex(primary, 1.35));
-  hullGrad.addColorStop(0.55, primary);
-  hullGrad.addColorStop(1, shadeHex(primary, 0.55));
-  ctx.fillStyle = hullGrad;
-  ctx.beginPath();
-  ctx.moveTo(x + 4, hullTop + 2);
-  ctx.quadraticCurveTo(x + 4, hullTop, x + 8, hullTop);
-  if (hasGlacis) {
-    ctx.lineTo(x + W - slopeW - 2, hullTop);
-    ctx.lineTo(x + W - 4, hullBot);
-  } else {
-    ctx.lineTo(x + W - 4, hullTop);
-    ctx.lineTo(x + W - 4, hullBot);
-  }
-  ctx.lineTo(x + 4, hullBot);
-  ctx.closePath();
-  ctx.fill();
-
-  if (hasGlacis) {
-    ctx.fillStyle = shadeHex(primary, 0.72);
-    ctx.beginPath();
-    ctx.moveTo(x + W - slopeW - 2, hullTop);
-    ctx.lineTo(x + W - 4, hullBot);
-    ctx.lineTo(x + W - 4 - slopeW * 0.4, hullBot);
-    ctx.lineTo(x + W - slopeW * 0.55 - 2, hullTop);
-    ctx.closePath();
-    ctx.fill();
-  }
-
-  // Pattern overlay clipped inside the hull rectangle.
   const hullLeft = x + 3;
   const hullInnerW = hasGlacis ? W - slopeW - 4 : W - 8;
-  drawPattern(ctx, pattern, patternColor, hullLeft, hullTop, hullInnerW, hullH);
 
-  ctx.fillStyle = shadeHex(primary, 1.55);
-  ctx.fillRect(x + 6, hullTop, hasGlacis ? W - slopeW - 8 : W - 12, Math.max(1, W * 0.006));
-  ctx.fillStyle = "rgba(0,0,0,0.45)";
-  ctx.fillRect(x + 4, hullBot - 2, W - 8, 2);
+  if (!spriteHandled) {
+    // ——— Tread belt ———
+    ctx.fillStyle = "#0b0c10";
+    ctx.fillRect(x, treadTop, W, treadH);
+    ctx.fillStyle = "#1c1e26";
+    const linkW = Math.max(2, W * 0.025);
+    for (let lx = x + 2; lx < x + W - 2; lx += linkW + 2) {
+      ctx.fillRect(lx, treadTop + 2, linkW, treadH - 4);
+    }
+    ctx.fillStyle = "rgba(0,0,0,0.6)";
+    ctx.fillRect(x, treadBot - 2, W, 2);
+    ctx.fillStyle = "rgba(255,255,255,0.18)";
+    ctx.fillRect(x + 4, treadTop + 1, W - 8, 1);
 
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  const seamY = hullTop + hullH * 0.45;
-  ctx.fillRect(x + 6, seamY, hasGlacis ? W - slopeW - 8 : W - 12, Math.max(1, W * 0.005));
+    // ——— Road wheels ———
+    const wheelR = treadH * 0.45;
+    const wheelY = (treadTop + treadBot) / 2;
+    for (let i = 0; i < wheelCount; i++) {
+      const cx = x + W * 0.08 + (i * (W * 0.84)) / (wheelCount - 1);
+      const grad = ctx.createRadialGradient(cx - wheelR * 0.3, wheelY - wheelR * 0.3, 1, cx, wheelY, wheelR);
+      grad.addColorStop(0, "#6a6e7a");
+      grad.addColorStop(0.7, "#3a3d47");
+      grad.addColorStop(1, "#14161c");
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx, wheelY, wheelR, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "#0a0b10";
+      ctx.beginPath(); ctx.arc(cx, wheelY, wheelR * 0.45, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = "rgba(255,255,255,0.4)";
+      ctx.beginPath(); ctx.arc(cx - wheelR * 0.2, wheelY - wheelR * 0.2, wheelR * 0.18, 0, Math.PI * 2); ctx.fill();
+    }
 
-  ctx.fillStyle = "rgba(0,0,0,0.55)";
-  const rivetSize = Math.max(1.2, W * 0.008);
-  const rivetStep = Math.max(8, W * 0.06);
-  for (let rx = x + 10; rx < x + (hasGlacis ? W - slopeW - 4 : W - 6); rx += rivetStep) {
-    ctx.fillRect(rx, hullTop + 2, rivetSize, rivetSize);
-    ctx.fillRect(rx, seamY + 2, rivetSize * 0.9, rivetSize * 0.9);
+    if (hasSkirt) {
+      ctx.fillStyle = primary;
+      ctx.fillRect(x + 2, treadTop - treadH * 0.3, W - 4, treadH * 0.42);
+      ctx.fillStyle = "rgba(0,0,0,0.35)";
+      ctx.fillRect(x + 2, treadTop + 1, W - 4, 1);
+      ctx.fillStyle = "rgba(0,0,0,0.55)";
+      for (let lx = x + 6; lx < x + W - 6; lx += 12) ctx.fillRect(lx, treadTop - treadH * 0.22, 1.4, 1.4);
+    }
+
+    // ——— Hull ———
+    const hullGrad = ctx.createLinearGradient(0, hullTop, 0, hullBot);
+    hullGrad.addColorStop(0, shadeHex(primary, 1.35));
+    hullGrad.addColorStop(0.55, primary);
+    hullGrad.addColorStop(1, shadeHex(primary, 0.55));
+    ctx.fillStyle = hullGrad;
+    ctx.beginPath();
+    ctx.moveTo(x + 4, hullTop + 2);
+    ctx.quadraticCurveTo(x + 4, hullTop, x + 8, hullTop);
+    if (hasGlacis) {
+      ctx.lineTo(x + W - slopeW - 2, hullTop);
+      ctx.lineTo(x + W - 4, hullBot);
+    } else {
+      ctx.lineTo(x + W - 4, hullTop);
+      ctx.lineTo(x + W - 4, hullBot);
+    }
+    ctx.lineTo(x + 4, hullBot);
+    ctx.closePath();
+    ctx.fill();
+
+    if (hasGlacis) {
+      ctx.fillStyle = shadeHex(primary, 0.72);
+      ctx.beginPath();
+      ctx.moveTo(x + W - slopeW - 2, hullTop);
+      ctx.lineTo(x + W - 4, hullBot);
+      ctx.lineTo(x + W - 4 - slopeW * 0.4, hullBot);
+      ctx.lineTo(x + W - slopeW * 0.55 - 2, hullTop);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    drawPattern(ctx, pattern, patternColor, hullLeft, hullTop, hullInnerW, hullH);
+
+    ctx.fillStyle = shadeHex(primary, 1.55);
+    ctx.fillRect(x + 6, hullTop, hasGlacis ? W - slopeW - 8 : W - 12, Math.max(1, W * 0.006));
+    ctx.fillStyle = "rgba(0,0,0,0.45)";
+    ctx.fillRect(x + 4, hullBot - 2, W - 8, 2);
+
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    const seamY = hullTop + hullH * 0.45;
+    ctx.fillRect(x + 6, seamY, hasGlacis ? W - slopeW - 8 : W - 12, Math.max(1, W * 0.005));
+
+    ctx.fillStyle = "rgba(0,0,0,0.55)";
+    const rivetSize = Math.max(1.2, W * 0.008);
+    const rivetStep = Math.max(8, W * 0.06);
+    for (let rx = x + 10; rx < x + (hasGlacis ? W - slopeW - 4 : W - 6); rx += rivetStep) {
+      ctx.fillRect(rx, hullTop + 2, rivetSize, rivetSize);
+      ctx.fillRect(rx, seamY + 2, rivetSize * 0.9, rivetSize * 0.9);
+    }
+
+    ctx.fillStyle = accent;
+    const stripeY = hullTop + hullH * 0.62;
+    ctx.fillRect(x + 8, stripeY, (hasGlacis ? W - slopeW - 10 : W - 16), Math.max(1.2, W * 0.008));
+    ctx.fillStyle = "rgba(0,0,0,0.35)";
+    ctx.fillRect(x + 8, stripeY + Math.max(1.2, W * 0.008), (hasGlacis ? W - slopeW - 10 : W - 16), Math.max(0.5, W * 0.003));
+
+    // Hatch.
+    const hatchX = x + W * 0.42;
+    const hatchY = hullTop + hullH * 0.22;
+    const hatchR = Math.max(2, W * 0.025);
+    ctx.fillStyle = "rgba(0,0,0,0.4)";
+    ctx.beginPath(); ctx.arc(hatchX, hatchY, hatchR, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = Math.max(0.6, W * 0.0035);
+    ctx.beginPath(); ctx.arc(hatchX, hatchY, hatchR, 0, Math.PI * 2); ctx.stroke();
+
+    // Antenna.
+    ctx.strokeStyle = "#0a0a10";
+    ctx.lineWidth = Math.max(1, W * 0.008);
+    ctx.beginPath();
+    ctx.moveTo(x + 10, hullTop);
+    ctx.lineTo(x + 10, hullTop - hullH * 0.45);
+    ctx.stroke();
+
+    // Rear stowage box.
+    const boxW = Math.max(6, W * 0.06);
+    const boxH = hullH * 0.55;
+    ctx.fillStyle = "rgba(55,50,40,0.9)";
+    ctx.fillRect(x + 4, hullTop + 4, boxW, boxH);
+    ctx.strokeStyle = "rgba(255,255,255,0.25)";
+    ctx.lineWidth = 0.6;
+    ctx.strokeRect(x + 4, hullTop + 4, boxW, boxH);
+    ctx.fillStyle = "rgba(0,0,0,0.5)";
+    ctx.fillRect(x + 4, hullTop + 4 + boxH * 0.5, boxW, 0.8);
   }
 
-  ctx.fillStyle = accent;
-  const stripeY = hullTop + hullH * 0.62;
-  ctx.fillRect(x + 8, stripeY, (hasGlacis ? W - slopeW - 10 : W - 16), Math.max(1.2, W * 0.008));
-  ctx.fillStyle = "rgba(0,0,0,0.35)";
-  ctx.fillRect(x + 8, stripeY + Math.max(1.2, W * 0.008), (hasGlacis ? W - slopeW - 10 : W - 16), Math.max(0.5, W * 0.003));
-
-  // Hatch.
-  const hatchX = x + W * 0.42;
-  const hatchY = hullTop + hullH * 0.22;
-  const hatchR = Math.max(2, W * 0.025);
-  ctx.fillStyle = "rgba(0,0,0,0.4)";
-  ctx.beginPath(); ctx.arc(hatchX, hatchY, hatchR, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = "rgba(255,255,255,0.3)";
-  ctx.lineWidth = Math.max(0.6, W * 0.0035);
-  ctx.beginPath(); ctx.arc(hatchX, hatchY, hatchR, 0, Math.PI * 2); ctx.stroke();
-
-  // Antenna.
-  ctx.strokeStyle = "#0a0a10";
-  ctx.lineWidth = Math.max(1, W * 0.008);
-  ctx.beginPath();
-  ctx.moveTo(x + 10, hullTop);
-  ctx.lineTo(x + 10, hullTop - hullH * 0.45);
-  ctx.stroke();
-
-  // Rear stowage box.
-  const boxW = Math.max(6, W * 0.06);
-  const boxH = hullH * 0.55;
-  ctx.fillStyle = "rgba(55,50,40,0.9)";
-  ctx.fillRect(x + 4, hullTop + 4, boxW, boxH);
-  ctx.strokeStyle = "rgba(255,255,255,0.25)";
-  ctx.lineWidth = 0.6;
-  ctx.strokeRect(x + 4, hullTop + 4, boxW, boxH);
-  ctx.fillStyle = "rgba(0,0,0,0.5)";
-  ctx.fillRect(x + 4, hullTop + 4 + boxH * 0.5, boxW, 0.8);
-
   // ——— Turret ———
+  // Coords always computed because the barrel pivot uses them.
   const turretW = W * turretWMap[turretStyle];
   const turretH = W * turretHMap[turretStyle];
   const turretCx = x + W * 0.44;
   const turretCy = hullTop - turretH * 0.25;
 
+  if (!spriteHandled) {
   const tGrad = ctx.createLinearGradient(0, turretCy - turretH / 2, 0, turretCy + turretH / 2);
   tGrad.addColorStop(0, shadeHex(primary, 1.45));
   tGrad.addColorStop(0.6, shadeHex(primary, 1.08));
@@ -386,8 +402,16 @@ export function drawTankPreview(
 
   ctx.fillStyle = "rgba(22,22,28,0.95)";
   ctx.fillRect(turretCx + turretW * 0.32, turretCy - W * 0.016, W * 0.032, W * 0.03);
+  } // end !spriteHandled turret block
 
-  drawDecal(ctx, decal, x + W * 0.25, hullTop + hullH * 0.55, W, primary);
+  if (decal !== "none") {
+    const dcx = x + W * 0.25;
+    const dcy = hullTop + hullH * 0.55;
+    const dSize = Math.max(8, W * 0.08);
+    if (!drawDecalSprite(ctx, decal, dcx, dcy, dSize)) {
+      drawDecal(ctx, decal, dcx, dcy, W, primary);
+    }
+  }
 
   if (!skipBarrel) {
     const bX = turretCx + turretW * 0.28;
@@ -397,10 +421,14 @@ export function drawTankPreview(
       ctx.save();
       ctx.translate(bX, bY);
       ctx.rotate(angle);
-      drawBarrelAt(ctx, 0, 0, W, barrelStyle);
+      if (!drawTankBarrelSprite(ctx, bodyStyle, turretStyle, primary, 0, 0, W)) {
+        drawBarrelAt(ctx, 0, 0, W, barrelStyle);
+      }
       ctx.restore();
     } else {
-      drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+      if (!drawTankBarrelSprite(ctx, bodyStyle, turretStyle, primary, bX, bY, W)) {
+        drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+      }
     }
   }
 
@@ -562,7 +590,16 @@ export interface BarrelRenderResult {
   pivotY: number;
 }
 
-export function renderBarrelCanvas(barrelStyle: BarrelStyle): BarrelRenderResult {
+export interface RenderBarrelOpts {
+  bodyStyle: BodyStyle;
+  turretStyle: TurretStyle;
+  primary: string;
+  /** Used only when no preset sprite matches (canvas fallback). */
+  barrelStyle: BarrelStyle;
+}
+
+export function renderBarrelCanvas(opts: RenderBarrelOpts): BarrelRenderResult {
+  const { bodyStyle, turretStyle, primary, barrelStyle } = opts;
   const W = BARREL_REF_W;
   const barrelLen = W * barrelLenMap[barrelStyle];
   const barrelThick = W * barrelThickMap[barrelStyle];
@@ -580,7 +617,9 @@ export function renderBarrelCanvas(barrelStyle: BarrelStyle): BarrelRenderResult
 
   const bX = padL;
   const bY = padV + barrelThick / 2;
-  drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+  if (!drawTankBarrelSprite(ctx, bodyStyle, turretStyle, primary, bX, bY, W)) {
+    drawBarrelAt(ctx, bX, bY, W, barrelStyle);
+  }
 
   return {
     canvas,

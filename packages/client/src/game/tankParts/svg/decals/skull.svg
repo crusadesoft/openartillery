@@ -1,0 +1,15 @@
+<!--
+  Skull decal — cranium + jaw + eye sockets + mouth slit.
+  Unit cell viewBox "-1 -1 2 2".
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-1 -1 2 2" width="80" height="80">
+  <g fill="rgba(240,234,220,0.92)" stroke="rgba(0,0,0,0.7)" stroke-width="0.08">
+    <circle cx="0" cy="-0.2" r="0.7"/>
+    <ellipse cx="0" cy="0.35" rx="0.5" ry="0.3"/>
+  </g>
+  <g fill="rgba(0,0,0,0.85)">
+    <circle cx="-0.3" cy="-0.2" r="0.18"/>
+    <circle cx="0.3"  cy="-0.2" r="0.18"/>
+    <rect x="-0.2" y="0.25" width="0.4" height="0.06"/>
+  </g>
+</svg>

@@ -1,0 +1,24 @@
+<!--
+  "Mortar" barrel sprite — squat, very wide tube. Pivot at (0, 0). refW=48.
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="-1 -5.5 13 11"
+     width="65" height="55">
+  <defs>
+    <linearGradient id="g" x1="0" y1="-2.64" x2="0" y2="2.64" gradientUnits="userSpaceOnUse">
+      <stop offset="0"   stop-color="#2d313e"/>
+      <stop offset="0.5" stop-color="#181a22"/>
+      <stop offset="1"   stop-color="#070810"/>
+    </linearGradient>
+  </defs>
+  <rect x="-0.48" y="-4.64" width="1.68" height="9.28" fill="#15171e"/>
+  <rect x="-0.48" y="-2.64" width="1.68" height="5.28" fill="#2a2e3a"/>
+  <rect x="0" y="-2.64" width="10.56" height="5.28" fill="url(#g)"/>
+  <rect x="2" y="-1.64" width="6.56" height="0.6" fill="rgba(255,255,255,0.2)"/>
+  <rect x="4.752" y="-2.64" width="1" height="5.28" fill="rgba(0,0,0,0.45)"/>
+  <rect x="4.56" y="-3.64" width="6" height="7.28" fill="#2b2f3c"/>
+  <rect x="4.56" y="-2.64" width="6" height="1" fill="rgba(255,255,255,0.28)"/>
+  <rect x="5.76" y="-1.64" width="1" height="3.28" fill="#0a0b10"/>
+  <rect x="7.86" y="-1.64" width="1" height="3.28" fill="#0a0b10"/>
+  <rect x="8.56" y="-1.64" width="2" height="3.28" fill="#000000"/>
+</svg>
