@@ -53,6 +53,11 @@ const BaseSchema = z.object({
   // When set, /api/shop/checkout returns a fake success URL and the webhook
   // path can be hit directly with no signature for local dev.
   SHOP_DEV_MODE: envBool(false),
+  // Master kill-switch for paid purchases. When false the catalog still
+  // renders (so players can preview), but the Buy button is disabled with
+  // a "Coming soon" notice and /api/shop/checkout returns 503. Used while
+  // we wait for Xsolla's launch approval.
+  SHOP_ENABLED: envBool(true),
 });
 
 /**

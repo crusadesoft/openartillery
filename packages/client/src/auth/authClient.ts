@@ -130,7 +130,7 @@ export const api = {
     });
   },
   getTanks(accessToken?: string) {
-    return request<{ tanks: TankListing[] }>(`/api/shop/tanks`, {
+    return request<{ tanks: TankListing[]; enabled: boolean }>(`/api/shop/tanks`, {
       ...(accessToken ? { auth: accessToken } : {}),
     });
   },

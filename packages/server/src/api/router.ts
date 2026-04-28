@@ -22,6 +22,7 @@ import {
   saveSelection,
 } from "../shop/service.js";
 import { createCheckout } from "../shop/xsolla.js";
+import { config } from "../config.js";
 
 export const apiRouter = Router();
 apiRouter.use(apiLimiter);
@@ -227,7 +228,7 @@ apiRouter.get(
   asyncHandler(async (req, res) => {
     const auth = (req as AuthedRequest).auth;
     const owned = auth ? await getOwnedTankSkus(auth.userId) : new Set<string>();
-    res.json({ tanks: listTanks(owned) });
+    res.json({ tanks: listTanks(owned), enabled: config.SHOP_ENABLED });
   }),
 );
 
@@ -235,6 +236,13 @@ apiRouter.post(
   "/shop/checkout",
   requireAuth(),
   asyncHandler(async (req, res) => {
+    if (!config.SHOP_ENABLED) {
+      throw new HttpError(
+        503,
+        "Shop is not yet accepting payments. Check back soon.",
+        "shop_disabled",
+      );
+    }
     const { auth } = req as AuthedRequest;
     const sku = String(req.body?.sku ?? "");
     if (!isTankSku(sku) || !isPaidTankSku(sku)) {

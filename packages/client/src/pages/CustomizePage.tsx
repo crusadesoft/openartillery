@@ -415,7 +415,7 @@ function ShopGrid({
   highlightSku: string | null;
 }): JSX.Element {
   const { session } = useAuth();
-  const { buyTank } = useShop();
+  const { buyTank, shopEnabled } = useShop();
   const [busySku, setBusySku] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -451,7 +451,13 @@ function ShopGrid({
 
   return (
     <div className="catalog-page shop-grid">
-      {!session && (
+      {!shopEnabled && (
+        <div className="shop-banner">
+          Shop is preview-only — purchases open soon. You can browse the
+          tanks now and buy once we&apos;re live.
+        </div>
+      )}
+      {shopEnabled && !session && (
         <div className="shop-banner">
           Log in or create an account to purchase tanks.
         </div>
@@ -464,7 +470,8 @@ function ShopGrid({
             tank={t}
             highlight={t.sku === highlightSku}
             busy={busySku === t.sku}
-            disabled={!session || t.owned}
+            disabled={!session || t.owned || !shopEnabled}
+            comingSoon={!shopEnabled}
             onBuy={() => onBuy(t.sku)}
           />
         ))}
@@ -475,12 +482,13 @@ function ShopGrid({
 }
 
 function TankCard({
-  tank, highlight, busy, disabled, onBuy,
+  tank, highlight, busy, disabled, comingSoon, onBuy,
 }: {
   tank: TankListing;
   highlight: boolean;
   busy: boolean;
   disabled: boolean;
+  comingSoon: boolean;
   onBuy: () => void;
 }) {
   const previewLoadout: Loadout = tankToLoadout(
@@ -516,9 +524,11 @@ function TankCard({
         >
           {tank.owned
             ? "Owned"
-            : busy
-              ? "Opening checkout…"
-              : `Buy — $${(tank.priceCents / 100).toFixed(2)}`}
+            : comingSoon
+              ? "Coming soon"
+              : busy
+                ? "Opening checkout…"
+                : `Buy — $${(tank.priceCents / 100).toFixed(2)}`}
         </button>
       </div>
     </div>

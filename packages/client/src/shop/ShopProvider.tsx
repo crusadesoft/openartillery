@@ -30,6 +30,9 @@ interface ShopContextValue {
   /** Decals the player can equip (free + bonus from owned tanks). */
   ownedDecals: ReadonlySet<DecalStyle>;
   tanks: TankListing[];
+  /** Server-controlled flag — false while we wait on Xsolla launch
+   *  approval. UI keeps the catalog visible but disables the Buy button. */
+  shopEnabled: boolean;
   setSelection: (next: LoadoutSelection) => void;
   refreshShop: () => Promise<void>;
   buyTank: (sku: string) => Promise<string>;
@@ -48,6 +51,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }): JSX.E
   );
   const [ownedTanks, setOwnedTanks] = useState<ReadonlySet<string>>(new Set());
   const [tanks, setTanks] = useState<TankListing[]>([]);
+  const [shopEnabled, setShopEnabled] = useState(true);
 
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTokenRef = useRef<string | null>(null);
@@ -67,6 +71,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }): JSX.E
         const owned = new Set(me.ownedSkus);
         setOwnedTanks(owned);
         setTanks(shop.tanks);
+        setShopEnabled(shop.enabled);
         const safe = downgradeSelection(sanitizeSelection(me.selection), owned);
         setSelectionState(safe);
         saveSelection(safe);
@@ -74,6 +79,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }): JSX.E
         const shop = await api.getTanks();
         setOwnedTanks(new Set());
         setTanks(shop.tanks);
+        setShopEnabled(shop.enabled);
         const local = loadSelection();
         const safe = downgradeSelection(local, new Set());
         if (safe.tankSku !== local.tankSku || safe.decal !== local.decal) {
@@ -126,6 +132,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }): JSX.E
       ownedTanks,
       ownedDecals,
       tanks,
+      shopEnabled,
       setSelection,
       refreshShop,
       buyTank,
@@ -136,6 +143,7 @@ export function ShopProvider({ children }: { children: React.ReactNode }): JSX.E
       ownedTanks,
       ownedDecals,
       tanks,
+      shopEnabled,
       setSelection,
       refreshShop,
       buyTank,
@@ -155,6 +163,7 @@ export function useShop(): ShopContextValue {
       ownedTanks: new Set(),
       ownedDecals: decalsAvailable(new Set()),
       tanks: [],
+      shopEnabled: true,
       setSelection: () => undefined,
       refreshShop: async () => undefined,
       buyTank: async () => {

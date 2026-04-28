@@ -122,12 +122,13 @@ export function MatchEndOverlay({ room, secondsLeft, ranked }: Props): JSX.Eleme
 }
 
 function QuartermasterCard(): JSX.Element | null {
-  const { tanks } = useShop();
+  const { tanks, shopEnabled } = useShop();
   const featured = useMemo(() => {
+    if (!shopEnabled) return null;
     const unowned = tanks.filter((t) => !t.owned && t.priceCents > 0);
     if (unowned.length === 0) return null;
     return unowned[Math.floor(Math.random() * unowned.length)];
-  }, [tanks]);
+  }, [tanks, shopEnabled]);
   if (!featured) return null;
   return (
     <a className="quartermaster-card" href="#/customize?tab=shop">
