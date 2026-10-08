@@ -27,6 +27,14 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.set("trust proxy", 1);
+// One canonical host, so search engines don't split ranking between
+// www.openartillery.net and openartillery.net.
+app.use((req, res, next) => {
+  if (req.hostname.startsWith("www.") && (req.method === "GET" || req.method === "HEAD")) {
+    return res.redirect(301, `https://${req.hostname.slice(4)}${req.originalUrl}`);
+  }
+  next();
+});
 app.use(requestId);
 app.use(httpLogger);
 app.use(httpTiming());
@@ -106,10 +114,17 @@ app.use(
     },
   }),
 );
+// First path segments the client router promotes into hash routes
+// (see useRouter in packages/client/src/router.tsx). Deep links like
+// /play get a 200; any other path still gets the app, but with a 404
+// so crawlers don't index junk URLs as duplicates of the homepage.
+const CLIENT_ROUTES = new Set(["login", "register", "play", "leaderboard", "settings", "customize", "arsenal", "about", "profile", "game"]);
 app.get("*", (req, res, next) => {
   if (req.path.startsWith("/api") || req.path.startsWith("/auth") || req.path.startsWith("/webhooks") || req.path.startsWith("/colyseus") || req.path.startsWith("/metrics") || req.path.startsWith("/health")) {
     return next();
   }
+  const firstSegment = req.path.split("/")[1] ?? "";
+  if (req.path !== "/" && !CLIENT_ROUTES.has(firstSegment)) res.status(404);
   res.setHeader("Cache-Control", "no-cache");
   res.sendFile(path.join(clientDist, "index.html"), (err) => {
     if (err) next();

@@ -3,9 +3,33 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
-    <title>OpenArtillery</title>
+    <title>OpenArtillery – Free Multiplayer Tank Artillery Game in Your Browser</title>
     <meta name="theme-color" content="#0b1020" />
-    <meta name="description" content="Turn-based multiplayer tank artillery. Destructible terrain, wind, gravity, bots, ranked MMR." />
+    <meta name="description" content="Free turn-based tank artillery game that runs in your browser. Destructible terrain, wind and gravity, online multiplayer, AI bots, and ranked play. No install." />
+    <link rel="canonical" href="https://openartillery.net/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="OpenArtillery" />
+    <meta property="og:url" content="https://openartillery.net/" />
+    <meta property="og:title" content="OpenArtillery – Free Multiplayer Tank Artillery Game" />
+    <meta property="og:description" content="Turn-based tank combat in your browser. Destructible terrain, wind, gravity, AI bots, and ranked play. No install." />
+    <meta property="og:image" content="https://openartillery.net/apple-touch-icon.png" />
+    <meta name="twitter:card" content="summary" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "VideoGame",
+        "name": "OpenArtillery",
+        "url": "https://openartillery.net/",
+        "description": "Free turn-based multiplayer tank artillery game that runs in any modern browser, with destructible terrain, wind, gravity, AI bots, and ranked play.",
+        "genre": ["Artillery", "Strategy", "Turn-based"],
+        "gamePlatform": "Web browser",
+        "applicationCategory": "Game",
+        "operatingSystem": "Any",
+        "playMode": ["MultiPlayer", "SinglePlayer"],
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "sameAs": ["https://github.com/crusadesoft/openartillery"]
+      }
+    </script>
     <link rel="icon" href="/favicon.ico" sizes="48x48" />
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
@@ -18,7 +42,25 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Static splash: shown while sprites load, and the only text crawlers
+         that don't run JS can see. React replaces it on first render. -->
+    <div id="root">
+      <main style="min-height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;padding:24px;text-align:center;background:#0b1020;color:#d9d1c4;font-family:'Chakra Petch',system-ui,sans-serif">
+        <h1 style="margin:0;font-family:Oswald,system-ui,sans-serif;font-size:40px;letter-spacing:2px">OpenArtillery</h1>
+        <p style="margin:0;font-size:18px">Free multiplayer tank artillery in your browser.</p>
+        <p style="margin:0;max-width:560px;color:#8d8a80">
+          Take turns aiming and firing tanks across procedurally generated maps
+          with destructible terrain, wind, and gravity. Play free-for-all,
+          duels, private lobbies with friends, or practice against AI bots.
+          Ranked matches update your MMR on a public leaderboard. Works on
+          desktop and mobile with no install.
+        </p>
+        <p style="margin:8px 0 0;color:#8d8a80">Loading…</p>
+        <p style="margin:0;font-size:13px">
+          <a href="https://github.com/crusadesoft/openartillery" style="color:#8d8a80">Source on GitHub</a>
+        </p>
+      </main>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
