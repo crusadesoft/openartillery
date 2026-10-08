@@ -52,6 +52,38 @@ JWT_ACCESS_SECRET=... JWT_REFRESH_SECRET=... docker compose up -d --build
 The `server` container fronts Colyseus; Postgres + Redis back it. Put a
 reverse proxy (Cloudflare Tunnel, nginx, Caddy) in front for TLS.
 
+## Deploy
+
+openartillery.net runs on a Netcup VPS that is only reachable over
+Tailscale, as the machine `vps` (`100.69.65.90`).
+
+- Checkout: `/opt/artillery`, a plain clone of this repo's `main`.
+- Secrets: `/opt/artillery/.env` on the box (not in git).
+- `/opt/artillery/docker-compose.override.yml` (also not in git) keeps
+  Postgres and Redis off the public ports and binds the server to
+  `127.0.0.1:2567`.
+- Ingress: the `cloudflared` systemd service tunnels openartillery.net and
+  www.openartillery.net to `127.0.0.1:2567` (`/etc/cloudflared/config.yml`).
+  There is no nginx or Caddy.
+- CI only lints, tests and builds the image; it does not deploy.
+
+To ship what's on `main` (push first), from a machine signed in to Tailscale:
+
+```bash
+ssh root@100.69.65.90 'cd /opt/artillery && docker tag artillery-server:latest artillery-server:rollback && git fetch && git reset --hard origin/main && docker compose up -d --build server'
+```
+
+Tailscale SSH may ask you to approve the login in a browser first. The
+build takes a few minutes while the old container keeps serving, then
+compose swaps containers, so the site is down for a few seconds. The
+server applies database migrations when it boots.
+
+To roll back to the image that was running before the last deploy:
+
+```bash
+ssh root@100.69.65.90 'cd /opt/artillery && docker tag artillery-server:rollback artillery-server:latest && docker compose up -d --no-build --force-recreate server'
+```
+
 ## Contributing
 
 Open an issue or PR. Include repro steps and your Node version.
