@@ -78,6 +78,15 @@ build takes a few minutes while the old container keeps serving, then
 compose swaps containers, so the site is down for a few seconds. The
 server applies database migrations when it boots.
 
+The Colyseus monitor (`/colyseus`, when `ENABLE_COLYSEUS_MONITOR=true`) and
+`/metrics` (when `METRICS_TOKEN` is unset) only answer requests made from the
+box itself and return 404 through Cloudflare. To open the monitor, forward the
+port and browse to http://localhost:2567/colyseus/:
+
+```bash
+ssh -N -L 2567:127.0.0.1:2567 root@100.69.65.90
+```
+
 To roll back to the image that was running before the last deploy:
 
 ```bash

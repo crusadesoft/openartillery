@@ -11,11 +11,12 @@ Encoder.BUFFER_SIZE = 128 * 1024;
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { config } from "./config.js";
 import { logger, httpLogger, requestId } from "./logger.js";
-import { httpTiming, metricsHandler } from "./metrics.js";
+import { httpTiming, metricsAccess, metricsHandler } from "./metrics.js";
 import { authRouter } from "./auth/router.js";
 import { apiRouter } from "./api/router.js";
 import { webhooksRouter } from "./api/webhooks.js";
 import { errorHandler, notFoundHandler } from "./middleware/error.js";
+import { privateOnly } from "./middleware/privateAccess.js";
 import { createColyseus, cleanupStaleRoomCaches } from "./colyseus.js";
 import { BattleRoom } from "./rooms/BattleRoom.js";
 import { startMatchmakingMonitor } from "./rooms/Matchmaking.js";
@@ -85,13 +86,17 @@ app.use(express.json({ limit: "64kb" }));
 app.get("/health", (_req, res) => {
   res.json({ ok: true, node: process.version, env: config.NODE_ENV });
 });
-app.get("/metrics", metricsHandler);
+if (config.METRICS_ENABLED) {
+  app.get("/metrics", metricsAccess(config.METRICS_TOKEN), metricsHandler);
+}
 
 app.use("/auth", authRouter);
 app.use("/api", apiRouter);
 
+// Never public: its API can call any method on any room. Reach it from the
+// VPS itself or through an SSH tunnel (README "Deploy").
 if (config.ENABLE_COLYSEUS_MONITOR) {
-  app.use("/colyseus", monitor());
+  app.use("/colyseus", privateOnly(monitor()));
 }
 
 // Serve built client in production.

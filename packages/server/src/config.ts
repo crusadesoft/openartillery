@@ -22,7 +22,9 @@ const BaseSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(2567),
   PUBLIC_ORIGIN: z.string().url().default("http://localhost:5173"),
-  ENABLE_COLYSEUS_MONITOR: z.coerce.boolean().default(true),
+  // The monitor can call any method on any room. Even when enabled it only
+  // answers direct private requests (see privateOnly in index.ts).
+  ENABLE_COLYSEUS_MONITOR: envBool(false),
 
   DATABASE_URL: z.string().min(1),
   REDIS_URL: z.string().min(1).default("redis://localhost:6379"),
@@ -42,7 +44,17 @@ const BaseSchema = z.object({
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
-  METRICS_ENABLED: z.coerce.boolean().default(true),
+  // When false, /metrics isn't mounted and nothing is recorded.
+  METRICS_ENABLED: envBool(true),
+  // Bearer token for /metrics. Unset: only direct requests from loopback or
+  // private addresses get an answer (see metricsAccess in metrics.ts).
+  METRICS_TOKEN: z.preprocess(
+    (v) => (typeof v === "string" ? v.trim() || undefined : v),
+    z
+      .string()
+      .min(32, "metrics token must be ≥32 chars (openssl rand -hex 32)")
+      .optional(),
+  ),
   SENTRY_DSN: z.string().optional(),
 
   XSOLLA_MERCHANT_ID: z.string().optional(),
